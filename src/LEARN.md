@@ -1,90 +1,198 @@
-# LangGraph Learning Framework
-> Rules, curriculum, and design decisions for building agents in this project.
-> This file is the single source of truth for the learning journey.
+# AI Playground Framework — Onboarding Guide
+> Everything a new team member needs to get started, contribute, and learn.
 
 ---
 
-## 1. How We Work Together
+## 1. What Is This Project?
 
-- **You write, I dictate** — line by line, you type each line yourself
-- **I explain every line** — what it does, why it's written this way, what would happen if written differently
-- **We run at the end** — every agent is tested after it's built
-- **No skipping** — we build from simple to complex, never jump ahead
-- After you learn, you teach the team using these same agents as examples
+This is a **LangGraph agent framework** — a platform for building, testing, and deploying AI agents. It has four main components:
+
+- **`studio.py`** — local debug UI (Gradio) — run it to test agents visually
+- **`server.py`** — REST API server (FastAPI) — used by n8n and other systems
+- **`src/agents/`** — all agents live here — each file is one agent
+- **`src/LEARN.md`** — this file — start here
+
+The framework auto-discovers agents — drop a new file in `src/agents/` and it appears in the UI automatically.
 
 ---
 
-## 2. Module 0 — Git Essentials (Before Everything Else)
+## 2. Prerequisites
 
-Git is required before touching any agent code. Every team member must know these commands.
+Before you start, make sure you have:
 
-### Daily Commands
+| Tool | Version | How to check |
+|---|---|---|
+| Python | 3.12+ | `python --version` |
+| Git | any | `git --version` |
+| VS Code | any | — |
+| Access to the repository | — | ask the owner |
+| `.env` file with credentials | — | ask the owner |
 
-| Command | When to use |
-|---|---|
-| `git clone <url>` | First time — downloads the repository to your machine |
-| `git status` | See which files changed since last commit |
-| `git pull` | Get the latest changes from the server before you start working |
-| `git add .` | Stage all modified files for commit |
-| `git commit -m "short description"` | Save a snapshot with a meaningful message |
-| `git push` | Send your commits to GitHub / Azure DevOps |
+---
 
-### Branch Workflow (one branch per agent)
+## 3. Getting Started (First Time Setup)
 
 ```bash
-git checkout -b agent-2-chat        # create a new branch for your work
-# ... write code ...
-git add .
-git commit -m "add agent_chat.py with MemorySaver"
-git push
-# open Pull Request → get review → merge to main
+# Step 1 — Clone the repository
+git clone <repository-url>
+cd <repository-folder>
+
+# Step 2 — Create and activate virtual environment
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # Mac/Linux
+
+# Step 3 — Install dependencies
+pip install -r requirements.txt
+
+# Step 4 — Set up environment variables
+cp .env.example .env
+# Open .env and fill in the values — ask the owner for credentials
+
+# Step 5 — Run the debug UI
+python studio.py
+# Open http://localhost:8000 in your browser
 ```
 
-**Rule:** Never commit directly to `main`. Always use a branch.
+---
+
+## 4. Git Workflow
+
+Branch protection is active — **no one can push directly to `main`**, including the owner.
+Every change goes through a Pull Request.
+
+### For developers — your job ends at step 6
+
+```bash
+# Step 1 — First time only: already done in Getting Started above
+
+# Step 2 — Every morning: get the latest changes
+git checkout main
+git pull
+
+# Step 3 — Switch to your working branch
+git checkout your-branch-name    # e.g. agent-3-tools
+# If the branch doesn't exist yet: git checkout -b your-branch-name
+
+# Step 4 — Write your code in VS Code
+
+# Step 5 — Stage and commit
+git add .                                          # or specific file: src/agents/agent_tools.py
+git commit -m "add agent_tools.py — ReAct loop"
+
+# Step 6 — Push and open a Pull Request
+git push origin your-branch-name
+# Go to GitHub → Compare & pull request → fill in title → Create pull request
+# Done — wait for the owner to review and approve
+```
+
+### For the owner — reviewing and merging
+
+```bash
+# On GitHub:
+# Pull requests → open the PR → Files changed tab (review the diff)
+# Bypass rules and merge  ← click when approved
+
+# Back in terminal — sync your local main after merge:
+git checkout main
+git pull
+```
 
 ### Commit Message Convention
 
 ```
-add agent_chat.py with MemorySaver
+add agent_tools.py — ReAct loop with ToolNode
 fix None guard in run_agent
 update LEARN.md curriculum to 19 agents
 remove debug print from agent_tools.py
 ```
 
-Short, imperative, English. No "I did...", no "Fixed the thing".
+Short, imperative, English. No "I did...", no "fixed the thing".
 
-### .gitignore — What Never Gets Committed
+### What Never Gets Committed (.gitignore)
 
-Create this file at the root of the project:
+| Entry | Why |
+|---|---|
+| `.env` | Contains API keys and secrets — never expose these |
+| `.venv/` | Virtual environment — each developer installs their own |
+| `__pycache__/` | Auto-generated bytecode — not needed in repo |
+| `*.db` | Local SQLite databases |
+| `.langgraph_api/` | Local LangGraph Studio checkpoints — not part of this project |
 
-```
-.env
-.venv/
-__pycache__/
-*.pyc
-*.db
-.gradio/
-```
-
-- `.env` — contains API keys and secrets — **never commit this**
-- `.venv/` — Python virtual environment — each developer installs their own
-- `__pycache__/` — compiled Python bytecode — auto-generated, not needed in repo
-- `*.db` — SQLite databases — local data, not shared
-
-### Common Mistakes to Avoid
+### Common Mistakes
 
 | Mistake | What happens | Fix |
 |---|---|---|
 | Commit `.env` | API keys exposed publicly | Add `.env` to `.gitignore` immediately |
-| Work directly on `main` | Breaks everyone's work | Always create a branch |
+| Work directly on `main` | Branch protection blocks it | Always create a branch first |
 | Vague commit message `"fix"` | Nobody knows what changed | Write what exactly changed |
-| `git push --force` | Overwrites others' work | Never use unless you know exactly why |
+| `git push --force` | Overwrites others' work | Never use this |
 
 ---
 
-## 3. Curriculum — Agents We Build
+## 5. Project Structure
 
-Each agent demonstrates **exactly one new concept**. No business logic — pure learning.
+```
+AIPlaygroundFramework/
+│
+├── src/
+│   ├── agents/      # One file per agent — each exposes run_agent()
+│   │                # Auto-discovered by registry.py
+│   │                # Example: agent_hello.py, agent_chat.py
+│   │
+│   ├── tools/       # Functions the LLM can call dynamically (@tool decorator)
+│   │                # Example: get_menu(), search_web(), book_table()
+│   │
+│   ├── nodes/       # Single steps in a graph (receive state, return partial state)
+│   │                # Example: node_classify(), node_summarize(), node_respond()
+│   │
+│   ├── graphs/      # StateGraph definitions — nodes connected with edges
+│   │                # Example: chat_graph.py, research_graph.py
+│   │
+│   ├── config.py    # Shared config — LLM client, Langfuse handler, env vars
+│   │                # Always import from here — never hardcode credentials
+│   │
+│   └── LEARN.md     # This file — start here
+│                    # Analogy: tools=hands, nodes=steps, graphs=recipe, agents=chef
+│
+├── studio.py        # Gradio debug UI — run locally to test agents (port 8000)
+├── server.py        # FastAPI REST server — used by n8n and other tools (port 8080)
+├── registry.py      # Auto-discovers all agents in src/agents/ at startup
+├── requirements.txt # All Python dependencies — install with: pip install -r requirements.txt
+│
+├── .env             # Your credentials (LLM key, Langfuse key) — NEVER commit this
+├── .env.example     # Template with empty values — safe to commit, shows what's needed
+└── .gitignore       # Tells Git what files to NEVER commit
+                     # Includes: .env, .venv/, __pycache__/, .langgraph_api/
+                     # Rule: if it contains secrets or can be regenerated → add it here
+```
+
+---
+
+## 6. Agent Contract
+
+Every file in `src/agents/` **must** have these five things to be auto-registered:
+
+```python
+AGENT_NAME = "My Agent"              # English, Title Case — shown in UI and API
+AGENT_TYPE = "chat"                  # "chat" | "processor" | "pipeline"
+AGENT_DESCRIPTION = "Does X and Y"  # shown in GET /agents
+
+trace_log: list[dict] = []           # NEVER reassign — always use .clear()
+
+def run_agent(payload) -> str | dict:
+    trace_log.clear()
+    # ... logic here
+    return result
+```
+
+If any of these are missing, the agent will **not** appear in `studio.py` or `server.py`.
+
+---
+
+## 7. Curriculum — 19 Learning Agents
+
+Each agent teaches exactly one new concept. No business logic — pure learning.
 
 ### Layer 1 — Fundamentals
 
@@ -101,10 +209,10 @@ Each agent demonstrates **exactly one new concept**. No business logic — pure 
 
 | # | File | Pattern | New Concepts |
 |---|---|---|---|
-| 7 | `agent_base.py` | BaseAgent + Mixins | CostTrackingMixin, LoggingMixin, AuthMixin — reusable enterprise behaviors |
+| 7 | `agent_base.py` | BaseAgent + Mixins | CostTrackingMixin, LoggingMixin, AuthMixin |
 | 8 | `agent_persist.py` | SqliteSaver | Persistence between sessions, checkpoint restore |
 | 9 | `agent_hitl.py` | Human in the Loop | interrupt(), approval gate, resume from checkpoint |
-| 10 | `agent_rag.py` | RAG pipeline | Embed, vector search, augment prompt, retrieval-grounded answers |
+| 10 | `agent_rag.py` | RAG pipeline | Embed, vector search, augment prompt |
 | 11 | `agent_streaming.py` | Token streaming | stream(), astream(), Gradio incremental output |
 | 12 | `agent_structured.py` | Structured output | Pydantic models, with_structured_output(), guaranteed JSON |
 | 13 | `agent_async.py` | Async + polling | job_id, ainvoke(), background task, webhook callback |
@@ -122,189 +230,32 @@ Each agent demonstrates **exactly one new concept**. No business logic — pure 
 
 ---
 
-## 3. Agent Contract — Quick Reference
+## 8. Labs for the Team
 
-Every file in `src/agents/` must have these four things to be auto-registered:
-
-```python
-AGENT_NAME = "My Agent"              # English, Title Case — shown in UI and API
-AGENT_TYPE = "chat"                  # "chat" | "processor" | "pipeline"
-AGENT_DESCRIPTION = "Does X and Y"  # shown in GET /agents
-
-trace_log: list[dict] = []           # NEVER reassign — always use .clear()
-
-def run_agent(payload) -> str | dict:
-    trace_log.clear()
-    # ... logic here
-    return result
-```
-
-If any of these are missing, the agent will not appear in `studio.py` or `server.py`.
+> TODO — filled after the full curriculum is complete.
+> Each agent becomes a hands-on lab exercise where team members modify and extend the code.
 
 ---
 
-## 4. src/ Folder — What Goes Where
+## 9. Learn Mode — Working with GitHub Copilot
 
+This project was built using a **line-by-line learning method** with GitHub Copilot.
+If you want to learn an agent the same way, type **"Learn Mode"** at the start of your Copilot session.
+
+Copilot will then:
+- Dictate one line at a time — you type it yourself
+- Explain every line: what it does, why it's written this way, what happens if written differently
+- Run the agent together at the end
+- Never skip ahead — always build from simple to complex
+
+### Example
 ```
-src/
-├── tools/      # Functions the LLM can call dynamically (@tool decorator)
-│               # Example: get_menu(), search_web(), book_table()
-│
-├── nodes/      # Single steps in a graph (receive state, return partial state)
-│               # Example: node_classify(), node_summarize(), node_respond()
-│
-├── graphs/     # StateGraph definitions — nodes connected with edges
-│               # Example: chat_graph.py, research_graph.py
-│
-└── agents/     # Orchestrators — combines LLM + tools + graph + trace_log
-                # One file per agent, each exposes run_agent()
-```
-
-Analogy: `tools` = hands, `nodes` = steps, `graphs` = recipe, `agents` = the chef.
-
----
-
-## 5. LangGraph Standard — Non-Negotiable
-
-### Imports — always use these
-```python
-from langgraph.graph import StateGraph, START, END, MessagesState
-from langgraph.prebuilt import ToolNode, tools_condition
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+You:  Learn Mode — I want to build agent_tools.py
+Copilot: [dictates line 1, explains it, waits for you to type it]
 ```
 
-### State — always TypedDict
-```python
-from langgraph.graph import MessagesState  # preferred for chat agents
+**Rules during Learn Mode:**
+- You type every line yourself — no copy-paste
+- Ask questions at any point — no question is too simple
+- We test at the end — every agent must run before moving to the next
 
-# Only define manually when you need extra fields beyond messages:
-from typing import TypedDict
-class State(TypedDict):
-    messages: list
-    category: str  # extra field example
-```
-
-### ReAct Tool Loop — standard pattern
-```python
-tool_node = ToolNode(TOOLS)
-
-def node_llm(state: State) -> dict:
-    response = llm_with_tools.invoke(state["messages"], config={"callbacks": [langfuse_handler]})
-    return {"messages": state["messages"] + [response]}
-
-def build_graph():
-    g = StateGraph(State)
-    g.add_node("llm", node_llm)
-    g.add_node("tools", tool_node)
-    g.add_edge(START, "llm")
-    g.add_conditional_edges("llm", tools_condition)  # auto-routes to "tools" or END
-    g.add_edge("tools", "llm")                       # loop back after tool result
-    return g.compile()
-```
-
-### Graph Invocation — always this way
-```python
-result = graph.invoke({"messages": [HumanMessage(content=user_input)]})
-final_answer = result["messages"][-1].content  # always extract .content
-```
-
----
-
-## 6. Memory Design Decisions
-
-| Type | Used? | Why |
-|---|---|---|
-| In-thread (RAM) | YES | Messages stay in state["messages"] during the session |
-| MemorySaver (RAM checkpointer) | YES from Agent 2 | Keeps context across multiple invoke calls in one session |
-| SqliteSaver (disk) | NO | Data cleared on session close — by design |
-| Vector store (long-term) | NO | Not needed for learning agents |
-
-**Rule:** When `studio.py` is closed, all conversation history is gone. This is intentional.
-Each new session starts fresh.
-
-**Implementation:** `graph.compile(checkpointer=MemorySaver())` + unique `thread_id` per session.
-
----
-
-## 7. Design Principles
-
-Every agent in this framework follows these principles:
-
-### Self-aware
-Each agent knows who it is and can explain itself. The `SYSTEM_PROMPT` always includes:
-- What the agent is
-- Why it was created
-- What concept it demonstrates
-- What the user can do with it
-
-```python
-SYSTEM_PROMPT = """
-You are Agent Hello — the first agent in the LangGraph learning series.
-Your purpose: demonstrate the basic agent contract (no graph).
-Concepts you teach: AGENT_NAME, AGENT_TYPE, trace_log, run_agent.
-If asked who you are or why you exist — explain exactly this.
-"""
-```
-
-### Single responsibility
-Each agent teaches exactly one new concept. No mixing concerns.
-
-### In-session memory only
-Agents remember the conversation within a session. On close — clean slate.
-
-### Always explainable
-Every line of code has a reason. No magic, no shortcuts that hide how things work.
-
----
-
-## 8. Language Rules — Always Enforce
-
-- **All code comments** → English only, never Romanian or any other language
-- **All `AGENT_NAME` values** → English, Title Case (e.g. `"Hello Agent"`, `"Research Agent"`)
-- **All variable names, function names, node names** → English only
-- **All tool docstrings** → English only (the LLM reads these to decide when to call the tool)
-- **All strings visible to LLM** (system prompts, tool descriptions) → English only
-
-These rules apply to every file in the project, without exception.
-
----
-
-## 9. Labs for the Team (TODO — filled after you complete the curriculum)
-
-After finishing all 19 agents, each becomes a lab exercise:
-
-### Layer 1 Labs — Fundamentals
-
-| Lab | Agent to study | Exercise |
-|---|---|---|
-| Lab 1 | `agent_hello.py` | Add a second trace_log entry; change SYSTEM_PROMPT, observe output |
-| Lab 2 | `agent_chat.py` | Change thread_id mid-session — observe memory reset |
-| Lab 3 | `agent_tools.py` | Add a new @tool function with a mandatory docstring |
-| Lab 4 | `agent_router.py` | Add a third route branch to an existing conditional edge |
-| Lab 5 | `agent_pipeline.py` | Insert a new node between two existing nodes |
-| Lab 6 | `agent_supervisor.py` | Add a fourth sub-agent using Command and Send |
-
-### Layer 2 Labs — Production Patterns
-
-| Lab | Agent to study | Exercise |
-|---|---|---|
-| Lab 7 | `agent_base.py` | Add a new mixin method; apply it to an existing agent |
-| Lab 8 | `agent_persist.py` | Resume a conversation from a previous session using checkpoint ID |
-| Lab 9 | `agent_hitl.py` | Implement a two-step approval (request + confirm) |
-| Lab 10 | `agent_rag.py` | Swap the vector store backend; observe retrieval differences |
-| Lab 11 | `agent_streaming.py` | Add streaming to an existing non-streaming agent |
-| Lab 12 | `agent_structured.py` | Add a new required field to the Pydantic output model |
-| Lab 13 | `agent_async.py` | Add a webhook callback to an existing async agent |
-
-### Layer 3 Labs — Enterprise & Deploy
-
-| Lab | Agent to study | Exercise |
-|---|---|---|
-| Lab 14 | `agent_secure.py` | Add a new injection pattern to the detection list |
-| Lab 15 | `agent_tenant.py` | Add per-tenant rate limiting on top of budget isolation |
-| Lab 16 | `agent_auth.py` | Add a new role with restricted tool access |
-| Lab 17 | `agent_approval.py` | Add a timeout — auto-reject if no approval within 60s |
-| Lab 18 | `agent_test.py` | Write a new pytest case that mocks LLM output |
-| Lab 19 | `agent_deploy.py` | Add an environment variable for on-prem vs cloud routing |
-
-> This section will be expanded with full lab instructions after the curriculum is complete.
