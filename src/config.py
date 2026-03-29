@@ -1,0 +1,37 @@
+"""
+src/config.py - Reads variables from .env and exposes them as constants.
+Also creates ready-to-use LLM client and Langfuse callback handler.
+"""
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+from langfuse.langchain import CallbackHandler
+
+load_dotenv()
+
+# LLM
+LLM_API_KEY = os.environ.get("LLM_API_KEY")
+LLM_PROXY = os.environ.get("LLM_PROXY")
+LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-5.1")
+
+# Langfuse (observability / tracing)
+# langfuse.langchain.CallbackHandler reads these env vars automatically:
+# LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST
+LANGFUSE_PROXY = os.environ.get("LANGFUSE_PROXY")
+LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY")
+LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY")
+
+# Set LANGFUSE_HOST so the SDK picks it up automatically
+os.environ["LANGFUSE_HOST"] = LANGFUSE_PROXY or ""
+os.environ["LANGFUSE_PUBLIC_KEY"] = LANGFUSE_PUBLIC_KEY or ""
+os.environ["LANGFUSE_SECRET_KEY"] = LANGFUSE_SECRET_KEY or ""
+
+# Ready-to-use LLM client (LiteLLM proxy, OpenAI-compatible)
+llm_client = OpenAI(
+    api_key=LLM_API_KEY,
+    base_url=LLM_PROXY,
+)
+
+# Ready-to-use Langfuse callback handler
+# In v4, reads LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST from env
+langfuse_handler = CallbackHandler()
