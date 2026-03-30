@@ -239,6 +239,9 @@ Each agent teaches exactly one new concept. No business logic — pure learning.
 
 ## 9. Learn Mode — Working with GitHub Copilot
 
+> **Important:** Before starting, make sure GitHub Copilot is set to use **Claude Sonnet** as the model.
+> In VS Code: open Copilot Chat → click the model selector (top of chat panel) → select **Claude Sonnet**.
+
 This project was built using a **line-by-line learning method** with GitHub Copilot.
 If you want to learn an agent the same way, type **"Learn Mode"** at the start of your Copilot session.
 
