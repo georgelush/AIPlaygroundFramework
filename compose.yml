@@ -1,0 +1,35 @@
+# Local development services for AI Playground
+# Usage:
+#   Start:  docker-compose up -d
+#   Stop:   docker-compose down
+#   Logs:   docker-compose logs -f
+
+services:
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: ai_playground
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+    driver: local
+  postgres_data:
+    driver: local
