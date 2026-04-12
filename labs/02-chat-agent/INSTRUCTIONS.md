@@ -1,4 +1,4 @@
-# Agent 2 — Chat Agent
+﻿# Agent 2 — Chat Agent
 
 ## What it demonstrates
 A single-node `StateGraph` with **in-session memory** — the agent remembers everything said in the current conversation.
@@ -10,6 +10,28 @@ First agent to introduce a real LangGraph graph.
 - `MessagesState` — built-in state that holds a list of messages
 - `MemorySaver` — in-memory checkpointer that persists state between invocations
 - `thread_id` — identifies a conversation session (same thread = shared memory)
+
+---
+
+
+## How to build this agent
+
+### STEP 1  Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/chat_agent.py`
+
+### STEP 2  Build in Learn Mode
+Type this in GitHub Copilot Chat:
+```
+Learn Mode  I want to build 02 Chat Agent
+```
+Copilot will guide you block by block through each section below.
+
+### STEP 3  Test in Studio
+```powershell
+python studio.py
+```
+Select **Chat Agent** from the dropdown.
 
 ---
 
@@ -92,9 +114,16 @@ def run_agent(payload: str) -> str:
 
 ---
 
-## Test checklist
-| Input | Expected output | What to watch in trace |
-|---|---|---|
-| `"My name is Alex."` | Acknowledges the name | 2 steps |
-| `"What is my name?"` | Remembers "Alex" from previous turn | Same 2 steps — memory working |
-| `"What is LangGraph?"` | Explains LangGraph | 2 steps |
+## Test Checklist
+
+| # | Input | Expected output | Trace expected |
+|---|---|---|---|
+| 1 | `"My name is Alex."` | Acknowledges the name | `node_exec` → `llm_response` (2 entries) |
+| 2 | `"What is my name?"` (second message, same session) | Remembers "Alex" from the previous turn | `node_exec` → `llm_response` (2 entries — memory working) |
+| 3 | `"What is LangGraph?"` | Explains LangGraph | `node_exec` → `llm_response` (2 entries) |
+
+**Why test #1:** Confirms the `HumanMessage` is correctly appended to the messages list and passed to the LLM. This is the foundation — if the message list is not built correctly, no conversation is possible.
+
+**Why test #2:** This is the critical memory test — it verifies that `MessagesState` accumulates messages across turns. Without appending the full history on every invoke, test #2 fails and the LLM says "I don't know your name."
+
+**Why test #3:** Verifies the `SYSTEM_PROMPT` topic restriction — only LangGraph-related questions should be answered. Confirms the `SystemMessage` is prepended before the conversation history on every call.

@@ -1,4 +1,4 @@
-# Agent 8 — Persist Agent
+﻿# Agent 8 — Persist Agent
 
 ## What it demonstrates
 **Persistent conversation memory** — replacing `MemorySaver` (Lab 02, RAM only) with `SqliteSaver` (writes to a `.sqlite` file on disk).
@@ -42,6 +42,28 @@ memory.db                    ← created automatically on first message (add to 
 
 > `memory.db` is created at the project root on first run.
 > Add it to `.gitignore` — never commit conversation history to Git.
+
+---
+
+
+## How to build this agent
+
+### STEP 1  Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/persist_agent.py`
+
+### STEP 2  Build in Learn Mode
+Type this in GitHub Copilot Chat:
+```
+Learn Mode  I want to build 08 Persist Agent
+```
+Copilot will guide you block by block through each section below.
+
+### STEP 3  Test in Studio
+```powershell
+python studio.py
+```
+Select **Persist Agent** from the dropdown.
 
 ---
 
@@ -159,11 +181,17 @@ def run_agent(payload) -> str:
 
 ## Test Checklist — Persist Agent
 
-| Input | Expected output | What to watch in trace |
-|---|---|---|
-| `"Salut, ma numesc Andrei"` | Greeting that mentions the name | `node_exec` with `messages in history: 2` |
-| `"Cum ma cheama?"` (same tab) | LLM knows the name is Andrei | `node_exec` with `messages in history: 4` — history grows |
-| Restart Studio → same tab → `"Cum ma cheama?"` | LLM **still** knows the name | `node_exec` with `messages in history: 4` — restored from `memory.db` |
+| # | Input | Expected output | Trace expected |
+|---|---|---|---|
+| 1 | `"My name is Andrei"` | Greeting that acknowledges the name | `node_exec` (`messages in history: 2`) → `llm_response` |
+| 2 | `"What is my name?"` (same tab, no restart) | Remembers "Andrei" from the previous turn | `node_exec` (`messages in history: 4`) → `llm_response` — history counter grows |
+| 3 | Restart Studio → reopen same tab → `"What is my name?"` | Still remembers "Andrei" | `node_exec` (`messages in history: 4`, restored from `memory.db`) → `llm_response` |
+
+**Why test #1:** Confirms the first message is stored in `memory.db` and the history counter starts at 2 (the HumanMessage + AIMessage). If this fails, `SqliteSaver` is not connected to the graph.
+
+**Why test #2:** Verifies in-session memory — the history counter growing from 2 to 4 confirms that `SqliteSaver` accumulates messages across turns within the same tab (same `thread_id`). Without this, the LLM says "I don't know your name."
+
+**Why test #3:** This is the critical persistence test — it proves the checkpoint survives a full server restart. Without `SqliteSaver`, the conversation state is lost on restart and test #3 fails. This is the whole point of Lab 08.
 
 ---
 

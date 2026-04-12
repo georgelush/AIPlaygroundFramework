@@ -1,4 +1,4 @@
-# Agent 6 — Supervisor Agent
+﻿# Agent 6 — Supervisor Agent
 
 ## What it demonstrates
 **Multi-agent coordination** — one supervisor LLM reads the input and delegates entirely to a specialized sub-agent.
@@ -18,6 +18,28 @@ The supervisor never answers directly — it always routes to another agent.
 | Sub-agent executes | N/A | Calls `target.run_agent(payload)` |
 | Result comes from | Same graph's state | External agent's return value |
 | Graph complexity | Branching, multiple nodes | Linear: supervise → delegate → END |
+
+---
+
+
+## How to build this agent
+
+### STEP 1  Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/supervisor_agent.py`
+
+### STEP 2  Build in Learn Mode
+Type this in GitHub Copilot Chat:
+```
+Learn Mode  I want to build 06 Supervisor Agent
+```
+Copilot will guide you block by block through each section below.
+
+### STEP 3  Test in Studio
+```powershell
+python studio.py
+```
+Select **Supervisor Agent** from the dropdown.
 
 ---
 
@@ -116,9 +138,16 @@ def build_graph():
 
 ---
 
-## Test checklist
-| Input | Delegated to | What to watch in trace |
-|---|---|---|
-| `"Who are you?"` | `chat` | Step 2: `Delegated to: chat`, orange+yellow badges |
-| `"What is 256 / 16?"` | `tools` | Step 2: `Delegated to: tools`, result contains number |
-| `"Summarize: The fox jumped over the dog repeatedly."` | `pipeline` | Step 2: `Delegated to: pipeline`, pipeline's 3 internal steps run |
+## Test Checklist
+
+| # | Input | Expected output | Trace expected |
+|---|---|---|---|
+| 1 | `"Who are you?"` | Agent introduces itself via the Chat sub-agent | `node_exec` (classify) → `graph_call` (Delegated to: chat, orange) → `graph_result` (chat, yellow) → `llm_response` |
+| 2 | `"What is 256 / 16?"` | `16` | `node_exec` (classify) → `graph_call` (Delegated to: tools, orange) → `graph_result` (tools, yellow) → `llm_response` |
+| 3 | `"Summarize: The fox jumped over the dog repeatedly."` | Short summary | `node_exec` (classify) → `graph_call` (Delegated to: pipeline, orange) → `graph_result` (pipeline, yellow) → `llm_response` |
+
+**Why test #1:** Verifies the `chat` delegation path and confirms that orange `graph_call` + yellow `graph_result` badge pairs appear in the trace. Without this, you never validate that the supervisor can hand off to a sub-agent and receive its result.
+
+**Why test #2:** Exercises the `tools` delegation path and confirms the math tool executes inside the sub-agent. The numerical answer proves the tool loop inside the Tools Agent ran correctly, not just that delegation was routed.
+
+**Why test #3:** Exercises the `pipeline` path and is the most expensive test — it triggers all 3 pipeline nodes inside the sub-agent. Confirms the supervisor can orchestrate a multi-node sub-graph, not just single-node agents.

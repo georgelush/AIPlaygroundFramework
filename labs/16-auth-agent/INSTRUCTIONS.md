@@ -119,37 +119,47 @@ if user_input.startswith("@"):
 
 ---
 
-## Setup
+## How to build this agent
 
-No extra infrastructure required.
+### STEP 1 — Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/auth_agent.py`
 
+### STEP 2 — Build in Learn Mode
+Type this in GitHub Copilot Chat:
 ```
-1. Copy solution file:
-   From: labs/16-auth-agent/solution/auth_agent.py
-   To:   src/agents/auth_agent.py
-
-2. Start Studio:
-   python studio.py
-
-3. Select "Auth Agent" from the dropdown
+Learn Mode — I want to build 16 Auth Agent
 ```
+Copilot will guide you block by block through the full implementation.
+
+### STEP 3 — Test in Studio
+```powershell
+python studio.py
+```
+Select **Auth Agent** from the dropdown.
 
 ---
 
 ## Test Checklist — Auth Agent
 
-| # | Input | Expected output | Code path covered |
+| # | Input | Expected output | Trace expected |
 |---|---|---|---|
-| 1 | `@alice Show all users` | LLM response (admin access) | `check_auth → llm` (ask_admin allowed for admin) |
-| 2 | `@bob Show all users` | `"Access denied. Role 'user'..."` | `check_auth → denied` (ask_admin denied for user) |
-| 3 | `@carol What is RBAC?` | LLM response | `check_auth → llm` (ask_general allowed for guest) |
-| 4 | `@carol Show all users` | `"Access denied. Role 'guest'..."` | `check_auth → denied` (ask_admin denied for guest) |
-| 5 | `Show all users` (no @) | `"Access denied. Role 'guest'..."` | fallback to anonymous/guest |
-| 6 | `@bob Show my profile` | LLM response | `check_auth → llm` (ask_personal allowed for user) |
+| 1 | `@alice Show all users` | LLM response (admin access granted) | `node_exec` (Auth Check, `user=alice \| role=admin \| action=ask_admin`) → `node_exec` (Auth OK) → `llm_response` (LLM) |
+| 2 | `@bob Show all users` | `"Access denied. Role 'user'..."` | `node_exec` (Auth Check, `user=bob \| role=user \| action=ask_admin`) → `node_exec` (Denied) — no `llm_response` |
+| 3 | `@carol What is RBAC?` | LLM response (general question allowed) | `node_exec` (Auth Check, `user=carol \| role=guest \| action=ask_general`) → `node_exec` (Auth OK) → `llm_response` (LLM) |
+| 4 | `@carol Show all users` | `"Access denied. Role 'guest'..."` | `node_exec` (Auth Check, `user=carol \| role=guest \| action=ask_admin`) → `node_exec` (Denied) — no `llm_response` |
+| 5 | `Show all users` (no `@` prefix) | `"Access denied. Role 'guest'..."` | `node_exec` (Auth Check, `user=anonymous \| role=guest`) → `node_exec` (Denied) — fallback to guest |
+| 6 | `@bob Show my profile` | LLM response (personal action allowed for user) | `node_exec` (Auth Check, `user=bob \| role=user \| action=ask_personal`) → `node_exec` (Auth OK) → `llm_response` (LLM) |
 
-**Why test #1 AND #2 with same message:** Proves role isolation — same message, different outcome based on role.
+**Why test #1 AND #2 with the same message:** Proves role isolation — same message produces different outcomes based on who sends it. The only variable is the `@` prefix.
 
-**Why test #5:** Verifies that missing identity defaults to `guest`, not `admin`.
+**Why test #3:** Verifies that `guest` role can perform `ask_general` actions. Without this test, you never confirm that the permission table allows the lowest-privilege role to do anything useful.
+
+**Why test #4:** Verifies the permission boundary for `guest` — `ask_admin` is denied even if `carol` is authenticated. Confirms the permission check fires correctly for a different action type.
+
+**Why test #5:** Verifies that missing identity defaults to `anonymous` / `guest` role — never to `admin`. This is a critical security test: if the default role were `admin`, any unauthenticated request would have full access.
+
+**Why test #6:** Verifies a second role (`user`) can access its own permitted action. Confirms `ROLE_PERMISSIONS` is checked per-action, not globally.
 
 **What to watch in trace for test #2:**
 - `Auth Check` entry shows `Role: user | Action: ask_admin`

@@ -206,6 +206,7 @@ graph = build_graph()  # compile once at module level
 When the user types **"Learn Mode — I want to build 01 Hello Agent"** (using the lab number and name), switch to block-by-block teaching mode:
 
 - **CRITICAL — Use the existing solution as the only reference:** Before starting, always read the corresponding solution file from `labs/XX-agent-name/solution/xx_agent.py`. Teach EXACTLY what is in that file — block by block. Never invent a different implementation, never add extra tools or nodes that don't exist in the solution. The solution file is the source of truth.
+- **ALSO READ INSTRUCTIONS.md:** Before starting, always read `labs/XX-agent-name/INSTRUCTIONS.md`. Use the Test Checklist from that file verbatim — never invent tests. Use the concept list from that file — never add concepts that are not in it. INSTRUCTIONS.md + solution file together are the only source of truth.
 - **FIRST ACTION — Create the file:** Before giving Block 1, always tell the user to create the target file. Use this exact format:
   > "Before we start, create this file:
   > **Path:** `src/agents/hello_agent.py`
@@ -218,16 +219,7 @@ When the user types **"Learn Mode — I want to build 01 Hello Agent"** (using t
 - Wait for the user to say **"next"** (or "done") before giving the next block
 - Never skip ahead — never give two blocks at once
 - At the end, run the agent together in Studio to verify it works
-- After giving the `run_agent()` block, always provide a **Test Checklist** in this exact format:
-
-```
-### Test Checklist — <Agent Name>
-| Input | Expected output | What to watch in trace |
-|---|---|---|
-| ... | ... | ... |
-```
-
-Include 2-3 inputs that cover all code paths (e.g. tool call vs no tool call, each routing branch). Tell the user exactly what trace log entries to verify.
+- After giving the `run_agent()` block, always provide the **Test Checklist taken verbatim from `labs/XX-agent-name/INSTRUCTIONS.md`** — never generate your own tests. If the INSTRUCTIONS.md has no test checklist, use the trace log section from that file to construct the tests. Never invent inputs or expected outputs that are not in the INSTRUCTIONS.md.
 
 **Block order for a standard agent:**
 1. Docstring
@@ -270,7 +262,7 @@ Output the full test checklist in this exact format:
 
 ```
 ### Test Checklist — <Agent Name>
-| # | Input | Expected output | Code path covered |
+| # | Input | Expected output | Trace expected |
 |---|---|---|---|
 | 1 | ... | ... | ... |
 | 2 | ... | ... | ... |
@@ -318,7 +310,7 @@ Include a concept entry for every distinct LangGraph/LangChain/Python construct 
 ### Step 4 — Setup instructions (if needed)
 If the agent requires infrastructure (Lab 13 = Redis, Lab 10 = Qdrant in-memory, Lab 08 = SQLite), prepend a **Setup** block before the test checklist.
 
-**Always include the exact copy command with full paths** — never say "copy the solution file" without specifying source and destination:
+**Always include the exact copy command with full paths** — never say "copy the solution file" without specifying source and destination. Use the Setup section from `labs/XX-agent-name/INSTRUCTIONS.md` as the source of truth for each lab's setup steps.
 
 ```
 ### Setup — <Agent Name>
@@ -330,12 +322,6 @@ Before running this agent:
 3. <infrastructure step — e.g. docker compose up -d redis>
 4. Start Studio: `python studio.py` → select <Agent Name>
 ```
-
-Examples:
-- Lab 09 (HITL): copy `labs/09-hitl-agent/solution/hitl_agent.py` → `src/agents/hitl_agent.py`. No extra infrastructure — SQLite creates `memory.db` automatically.
-- Lab 10 (RAG): copy `labs/10-rag-agent/solution/rag_agent.py` → `src/agents/rag_agent.py` AND copy `labs/10-rag-agent/solution/data/langgraph_concepts.txt` → `src/data/langgraph_concepts.txt`
-- Lab 13 (Async): copy `labs/13-async-agent/solution/async_agent.py` → `src/agents/async_agent.py` AND run `docker compose up -d redis` before starting Studio
-- Lab 08 (Persist): copy `labs/08-persist-agent/solution/persist_agent.py` → `src/agents/persist_agent.py`. No extra infrastructure — SQLite file is auto-created.
 
 ### What Test Mode must NOT do
 - Never ask the user to write or edit code

@@ -1,4 +1,4 @@
-# Agent 1 — Hello Agent
+﻿# Agent 1 — Hello Agent
 
 ## What it demonstrates
 The simplest possible agent contract — a direct LLM call with no graph, no nodes, no state.
@@ -11,6 +11,28 @@ Everything else in the framework builds on top of this foundation.
 ## Why no graph?
 The graph is not mandatory. When logic is simple and linear (one LLM call, one response),
 adding a graph only adds complexity. The agent contract is what matters here.
+
+---
+
+
+## How to build this agent
+
+### STEP 1  Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/hello_agent.py`
+
+### STEP 2  Build in Learn Mode
+Type this in GitHub Copilot Chat:
+```
+Learn Mode  I want to build 01 Hello Agent
+```
+Copilot will guide you block by block through each section below.
+
+### STEP 3  Test in Studio
+```powershell
+python studio.py
+```
+Select **Hello Agent** from the dropdown.
 
 ---
 
@@ -87,8 +109,13 @@ def run_agent(payload: str) -> str:
 
 ---
 
-## Test checklist
-| Input | Expected output | What to watch in trace |
-|---|---|---|
-| `"Who are you?"` | Explains it is Hello Agent, first in the series | 2 steps: node → llm_response |
-| `"What is the weather today?"` | Politely declines, redirects to LangGraph topics | Same 2 steps |
+## Test Checklist
+
+| # | Input | Expected output | Trace expected |
+|---|---|---|---|
+| 1 | `"Who are you?"` | Explains it is Hello Agent, first in the LangGraph series | `node_exec` → `llm_response` (2 entries) |
+| 2 | `"What is the weather today?"` | Politely declines, redirects to LangGraph topics | `node_exec` → `llm_response` (2 entries, no tool call) |
+
+**Why test #1:** Verifies the agent identity and `SYSTEM_PROMPT` are wired correctly into the graph. Without this test, you would never confirm the LLM actually reads the system instructions and introduces itself as Hello Agent.
+
+**Why test #2:** Verifies the `SYSTEM_PROMPT` topic restriction — the LLM must refuse off-topic questions. This is the key behavioral constraint of Lab 01. If the system prompt is missing or incorrectly placed, the LLM answers weather questions freely.

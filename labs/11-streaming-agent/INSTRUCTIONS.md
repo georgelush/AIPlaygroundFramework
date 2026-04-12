@@ -1,4 +1,4 @@
-# Agent 11 — Streaming Agent
+﻿# Agent 11 — Streaming Agent
 
 ## What it demonstrates
 **Token streaming** — instead of waiting for the full LLM response and returning it all at once,
@@ -79,6 +79,28 @@ labs/11-streaming-agent/
 └── solution/
     └── streaming_agent.py     ← reference solution
 ```
+
+---
+
+
+## How to build this agent
+
+### STEP 1  Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/streaming_agent.py`
+
+### STEP 2  Build in Learn Mode
+Type this in GitHub Copilot Chat:
+```
+Learn Mode  I want to build 11 Streaming Agent
+```
+Copilot will guide you block by block through each section below.
+
+### STEP 3  Test in Studio
+```powershell
+python studio.py
+```
+Select **Streaming Agent** from the dropdown.
 
 ---
 
@@ -246,11 +268,17 @@ def chat(user_message: str, history: list, agent_name: str):
 
 ## Test Checklist — Streaming Agent
 
-| Input | Expected output | What to verify in trace |
-|---|---|---|
-| `"who are you?"` | Identity explanation appears token by token | 2 entries: `node_exec` (User→LLM) + `llm_response` (LLM→user) |
-| `"explain what yield does in Python"` | Long explanation — streaming clearly visible | `llm_response` content = full assembled response |
-| `"what is the weather today?"` | Polite refusal, redirects to agent topics | Still 2 trace entries — no tools, no extra nodes |
+| # | Input | Expected output | Trace expected |
+|---|---|---|---|
+| 1 | `"Who are you?"` | Identity explanation appears token by token in the chatbox | `node_exec` (User→LLM) → `llm_response` (LLM→user, full assembled text) |
+| 2 | `"Explain what yield does in Python"` | Long detailed explanation — streaming clearly visible | `node_exec` → `llm_response` — trace panel updates AFTER streaming completes |
+| 3 | `"What is the weather today?"` | Polite refusal, redirects to agent topics | `node_exec` → `llm_response` (2 entries only — no tools, no routing nodes) |
+
+**Why test #1:** Verifies the generator pattern — text must appear progressively, not all at once. Confirms `yield` is not broken and the Gradio UI correctly renders streaming output.
+
+**Why test #2:** A long response makes streaming visually obvious. If the generator is broken (returns all at once), the user sees a blank screen then sudden full text — the whole point of Lab 11 is lost.
+
+**Why test #3:** Verifies the `SYSTEM_PROMPT` restriction works identically to non-streaming agents. Confirms no extra nodes fire when the LLM answers directly — the streaming wrapper must not change agent behaviour.
 
 **What to observe visually:**
 - Text appears progressively in the chatbox — not all at once

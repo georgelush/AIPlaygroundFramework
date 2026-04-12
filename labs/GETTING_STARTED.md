@@ -360,14 +360,20 @@ Rules:
 Agentic-AI-Playground/
 ├── src/
 │   ├── agents/          # Active agents — auto-loaded by registry
-│   │   └── ping_agent.py
+│   │   ├── ping_agent.py
+│   │   ├── approval_agent.py
+│   │   ├── rag_agent.py
+│   │   └── capstone_agent.py
 │   ├── graphs/          # StateGraph definitions (shared graphs)
+│   │   └── hr_graph.py
 │   ├── nodes/           # Reusable node functions
+│   │   └── hr_nodes.py
 │   ├── tools/           # Reusable @tool functions
+│   │   └── hr_tools.py
 │   ├── mixins/          # Reusable mixins (CostTrackingMixin, LoggingMixin, AuthMixin)
 │   ├── config.py        # LLM client, Langfuse handler, env vars
 │   └── registry.py      # Agent auto-discovery
-├── labs/                # 20-lab curriculum (01–17 ✅  |  18–20 🔜)
+├── labs/                # 20-lab curriculum (01–20 ✅)
 │   ├── README.md        # Curriculum overview + standards
 │   ├── GETTING_STARTED.md  # This file — full setup + framework walkthrough
 │   ├── 01-hello-agent/  # ✅ Direct LLM call, agent contract
@@ -382,12 +388,14 @@ Agentic-AI-Playground/
 │   ├── 10-rag-agent/    # ✅ RAG pipeline, Qdrant in-memory, text-embedding-3-small (multilingual)
 │   ├── 11-streaming-agent/ # ✅ llm.stream(), Generator, yield, Gradio incremental output
 │   ├── 12-structured-agent/ # ✅ Pydantic, with_structured_output(), guaranteed JSON
-│   ├── 13-async-agent/  # ✅ Async + polling, job_id, ainvoke(), Redis TTL, webhook
+│   ├── 13-async-agent/  # ✅ Async + polling, job_id, ainvoke(), Redis TTL, webhook  ⚠️ docker compose up -d redis
 │   ├── 14-secure-agent/ # ✅ Prompt injection detection, input validation, output sanitization
 │   ├── 15-tenant-agent/ # ✅ Budget isolation, thread_id namespacing, quota enforcement
 │   ├── 16-auth-agent/   # ✅ RBAC, identity context, audit trail
 │   ├── 17-approval-agent/ # ✅ HITL for sensitive operations, manager sign-off, escalation path
-│   └── 18–20/           # 🔜 Testing, Deploy, Capstone
+│   ├── 18-test-agent/   # ✅ pkgutil agent discovery, MagicMock, patch, contract checks, trace assertions
+│   ├── 19-deploy-agent/ # ✅ FastAPI REST server, LangGraph Platform standard, port tunneling, n8n integration
+│   └── 20-capstone-agent/ # ✅ RAG + HITL + Redis + RBAC + security + cost tracking — production-ready capstone  ⚠️ docker compose up -d redis
 ├── tests/
 ├── studio.py            # Gradio debug UI (port 8000)
 ├── server.py            # FastAPI REST server (port 8080)
@@ -424,7 +432,7 @@ If any of these are missing, the agent will **not** appear in `studio.py` or `se
 
 ---
 
-## 8. Curriculum — 19 Learning Agents
+## 8. Curriculum — 20 Learning Agents
 
 Each agent teaches exactly one new concept. No business logic — pure learning.
 
@@ -459,9 +467,9 @@ Each agent teaches exactly one new concept. No business logic — pure learning.
 | 15 | `tenant_agent.py` | Multi-tenant | Budget isolation per user, thread_id namespacing, quota enforcement |
 | 16 | `auth_agent.py` | SSO / Active Directory | Identity context, role-based access, per-call audit trail |
 | 17 | `approval_agent.py` | Approval workflow | HITL for sensitive operations, manager sign-off, escalation path |
-| 18 | `test_agent.py` | Testing | pytest, LLM mock, Langfuse batch evals, regression checks |
-| 19 | `deploy_agent.py` | Deploy + Interop | Docker, Azure Container Apps, n8n integration, A2A protocol, cross-framework agent communication |
-| 20 | `capstone_agent.py` | Production-ready | src/tools/, src/nodes/, src/graphs/, src/mixins/ — full separation of concerns, pytest |
+| 18 | `test_agent.py` | Testing | pkgutil auto-discovery, MagicMock, patch, contract checks, trace assertions |
+| 19 | `deploy_agent.py` | Deploy | FastAPI REST server, LangGraph Platform standard, port tunneling, n8n integration |
+| 20 | `capstone_agent.py` | Capstone | RAG + HITL + Redis + RBAC + input validation + cost tracking + logging — all patterns combined |
 
 ---
 

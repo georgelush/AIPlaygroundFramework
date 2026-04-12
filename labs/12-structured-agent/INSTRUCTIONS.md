@@ -1,4 +1,4 @@
-# Agent 12 — Structured Output Agent
+﻿# Agent 12 — Structured Output Agent
 
 ## What it demonstrates
 **Guaranteed JSON extraction** — instead of asking the LLM to "please return JSON" (which can fail),
@@ -44,6 +44,28 @@ You never call `json.loads()`. You never handle `KeyError`. The object arrives r
 | Email signature parsing | `John Smith \| CTO \| London` | Structured contact → CRM |
 | Form extraction | User fills a free-text box | Structured fields → backend API |
 | Data migration | Legacy unstructured records | Clean JSON → new database |
+
+---
+
+
+## How to build this agent
+
+### STEP 1  Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/structured_agent.py`
+
+### STEP 2  Build in Learn Mode
+Type this in GitHub Copilot Chat:
+```
+Learn Mode  I want to build 12 Structured Agent
+```
+Copilot will guide you block by block through each section below.
+
+### STEP 3  Test in Studio
+```powershell
+python studio.py
+```
+Select **Structured Agent** from the dropdown.
 
 ---
 
@@ -235,116 +257,23 @@ def run_agent(payload: str) -> dict:
 
 ---
 
-### Test 1 — Simple list format (smoke test)
+| # | Input | Expected output | Trace expected |
+|---|---|---|---|
+| 1 | `"Andrei Pop, 32 ani, Cluj, Java developer"` | `{"name": "Andrei Pop", "age": 32, "city": "Cluj", "role": "Java developer"}` | `node_exec` (Extract) → `llm_response` (Profile, `age` is integer 32 not string) |
+| 2 | `"Hi team, add John Anderson, Lead Cloud Architect, 41 years old, Seattle."` | `{"name": "John Anderson", "age": 41, "city": "Seattle", "role": "Lead Cloud Architect"}` | `node_exec` (Extract) → `llm_response` (Profile, multi-word role extracted correctly) |
+| 3 | `"Hi, I'm Maria. I'm a UX designer based in Paris."` | `{"name": "Maria", "age": null, "city": "Paris", "role": "UX designer"}` | `node_exec` (Extract) → `llm_response` (Profile, `age: null` — LLM does not hallucinate) |
+| 4 | `"Alex just turned thirty-two and joined as a DevOps engineer in Bucharest."` | `{"name": "Alex", "age": 32, "city": "Bucharest", "role": "DevOps engineer"}` | `node_exec` (Extract) → `llm_response` (Profile, `"thirty-two"` → `32` automatic conversion) |
+| 5 | `"What is the capital of France?"` | JSON response with `null` for most fields — schema always returned | `node_exec` (Extract) → `llm_response` (Profile — off-topic: schema constraint wins over SYSTEM_PROMPT) |
 
-**Input:**
-```
-Andrei Pop, 32 ani, Cluj, Java developer
-```
+**Why test #1:** The smoke test — confirms `with_structured_output()` binds the `PersonProfile` schema correctly and Pydantic type coercion fires (`age` arrives as integer, not string `"32"`).
 
-**Expected output:**
-```json
-{
-  "name": "Andrei Pop",
-  "age": 32,
-  "city": "Cluj",
-  "role": "Java developer"
-}
-```
+**Why test #2:** Tests NLP extraction from a narrative sentence — no commas, no template. The LLM extracts all 4 fields including a multi-word role. Validates that `with_structured_output` works with free-text, not just structured input.
 
-| What to check | Expected |
-|---|---|
-| All 4 fields populated | ✅ |
-| `age` is integer `32`, not string `"32"` | ✅ |
-| Entry #2 (Profile) in trace | Shows full dict |
+**Why test #3:** Verifies `Optional[int]` — the missing field must be `null`, not invented. Without `Optional`, Pydantic raises a validation error instead of returning `null`.
 
----
+**Why test #4:** Tests automatic type conversion — "thirty-two" (string) → `32` (int). No code was written for this; the LLM handles number normalisation as part of structured extraction.
 
-### Test 2 — Natural sentence (real-world format)
-
-**Input:**
-```
-Hi team, please add this contact to the CRM. John Anderson, Lead Cloud Architect, 41 years old, based in Seattle.
-```
-
-**Expected output:**
-```json
-{
-  "name": "John Anderson",
-  "age": 41,
-  "city": "Seattle",
-  "role": "Lead Cloud Architect"
-}
-```
-
-| What to check | Expected |
-|---|---|
-| LLM extracts from narrative text, not just lists | ✅ |
-| `role` = `"Lead Cloud Architect"` — multi-word role | ✅ |
-
-> **This is the real value** — no regex, no template, no parsing code.
-
----
-
-### Test 3 — Missing fields → null
-
-**Input:**
-```
-Hi, I'm Maria. I'm a UX designer based in Paris.
-```
-
-**Expected output:**
-```json
-{
-  "name": "Maria",
-  "age": null,
-  "city": "Paris",
-  "role": "UX designer"
-}
-```
-
-| What to check | Expected |
-|---|---|
-| `age` = `null` — not invented | ✅ |
-| LLM does NOT hallucinate an age | ✅ |
-
----
-
-### Test 4 — Number written in words
-
-**Input:**
-```
-My colleague Alex just turned thirty-two and joined as a DevOps engineer in our Bucharest office.
-```
-
-**Expected output:**
-```json
-{
-  "name": "Alex",
-  "age": 32,
-  "city": "Bucharest",
-  "role": "DevOps engineer"
-}
-```
-
-| What to check | Expected |
-|---|---|
-| `"thirty-two"` converted to `32` automatically | ✅ |
-| No code needed for this conversion — LLM handles it | ✅ |
-
----
-
-### Test 5 — Off-topic (grounding test)
-
-**Input:**
-```
-What is the capital of France?
-```
-
-**Expected:** LLM fills what it can with `null` — observe the behavior.
-`name` will likely be `null` or `"N/A"`. This demonstrates the **limitation** of `with_structured_output`:
-the schema is always returned — even for off-topic input. The SYSTEM_PROMPT tries to prevent it, but
-the schema constraint takes priority.
+**Why test #5:** Demonstrates the schema's limitation — `with_structured_output()` always returns the full schema shape even for off-topic input. The SYSTEM_PROMPT tries to prevent it but the schema constraint takes priority.
 
 ---
 

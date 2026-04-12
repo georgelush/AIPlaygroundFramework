@@ -22,6 +22,9 @@ LLM_API_KEY = os.environ.get("LLM_API_KEY")
 LLM_PROXY = os.environ.get("LLM_PROXY")
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-5.4-nano")
 
+# Infrastructure
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
+
 # Langfuse (observability / tracing)
 # langfuse.langchain.CallbackHandler reads these env vars automatically:
 # LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST

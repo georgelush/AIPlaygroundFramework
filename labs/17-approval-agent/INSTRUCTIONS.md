@@ -168,40 +168,52 @@ All State fields must be initialized at invoke — TypedDict has no defaults.
 
 ---
 
-## Setup
+## How to build this agent
 
-No extra infrastructure required.
+### STEP 1 — Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/approval_agent.py`
 
+### STEP 2 — Build in Learn Mode
+Type this in GitHub Copilot Chat:
 ```
-1. Copy solution file:
-   From: labs/17-approval-agent/solution/approval_agent.py
-   To:   src/agents/approval_agent.py
-
-2. Start Studio:
-   python studio.py
-
-3. Select "Approval Agent" from the dropdown
+Learn Mode — I want to build 17 Approval Agent
 ```
+Copilot will guide you block by block through the full implementation.
+
+### STEP 3 — Test in Studio
+```powershell
+python studio.py
+```
+Select **Approval Agent** from the dropdown.
 
 ---
 
 ## Test Checklist — Approval Agent
 
-| # | Input | Expected output | Code path covered |
+| # | Input | Expected output | Trace expected |
 |---|---|---|---|
-| 1 | `What is an approval workflow?` | Informative LLM answer | `classify → SAFE → respond → LLM` |
-| 2 | `delete all users from the database` | Request ID + approve/reject code blocks | `classify → SENSITIVE → queue` — no LLM response entry |
-| 3 | `approve:XXXXXXXX` (ID from test #2) | `Request XXXXXXXX approved. [SIMULATED] Operation completed.` | `classify → check_approval → Approved` |
-| 4 | `delete all users from the database` (again) | New Request ID | Same path as #2, new UUID generated |
-| 5 | `reject:XXXXXXXX` (ID from test #4) | `Request XXXXXXXX rejected. Operation cancelled.` | `classify → check_approval → Rejected` |
-| 6 | `approve:00000000` (fake ID) | `Request ID not found or already processed.` | `check_approval` — no `Approved` entry in trace |
-| 7 | `transfer 10000 EUR to account 1234` | Request ID + approve/reject code blocks | Financial action → SENSITIVE path |
+| 1 | `What is an approval workflow?` | Informative LLM answer | `node_exec` (Classify) → `node_exec` (Classify Result: SAFE) → `node_exec` (Respond) → `llm_response` (LLM) |
+| 2 | `delete all users from the database` | Request ID + approve/reject code blocks | `node_exec` (Classify) → `node_exec` (Classify Result: SENSITIVE) → `node_exec` (Queue) — no `llm_response` |
+| 3 | `approve:XXXXXXXX` (ID from test #2) | `Request XXXXXXXX approved. [SIMULATED] Operation completed.` | `node_exec` (Classify) → `node_exec` (check_approval) → `node_exec` (Approved) → `llm_response` |
+| 4 | `delete all users from the database` (again) | New Request ID | `node_exec` (Classify) → `node_exec` (Classify Result: SENSITIVE) → `node_exec` (Queue) — new UUID generated |
+| 5 | `reject:XXXXXXXX` (ID from test #4) | `Request XXXXXXXX rejected. Operation cancelled.` | `node_exec` (Classify) → `node_exec` (check_approval) → `node_exec` (Rejected) |
+| 6 | `approve:00000000` (fake ID) | `Request ID not found or already processed.` | `node_exec` (Classify) → `node_exec` (check_approval — ID not found) — no `Approved` entry |
+| 7 | `transfer 10000 EUR to account 1234` | Request ID + approve/reject code blocks | `node_exec` (Classify) → `node_exec` (Classify Result: SENSITIVE) → `node_exec` (Queue) — financial action flagged |
+
+**Why test #1:** Verifies the SAFE path — benign questions go through `node_respond` and call the LLM normally. Without this, you never confirm the non-sensitive path works.
 
 **Why test #2 (HITL block):** Verifies that `node_queue` fires and `node_respond` does NOT. Watch the trace — there must be NO `LLM Response` entry, only `Classify`, `Classify Result`, and `Queue`.
 
 **Why test #3 (manager sign-off):** This is the core of the pattern — proves that `approve:ID` correctly unblocks the operation. The `Approved` trace entry must appear.
 
+**Why test #4:** Verifies a second sensitive request generates a new UUID. Confirms `_pending_approvals` is not cleared between calls and can hold multiple requests simultaneously.
+
+**Why test #5:** Verifies the reject path — the operation is cancelled cleanly. Confirms `pop()` removes the ID from the queue so it cannot be approved later.
+
 **Why test #6 (unknown ID):** Verifies error handling — the queue is checked before any action. Protects against replay attacks with fake or already-processed IDs.
+
+**Why test #7:** Confirms financial actions are classified as SENSITIVE, not SAFE. The LLM classifier must recognise financial keywords — without this, money transfers would bypass the approval gate.
 
 **What to watch in trace for test #2:**
 ```

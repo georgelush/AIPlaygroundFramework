@@ -1,4 +1,4 @@
-# Agent 3 — Tools Agent
+﻿# Agent 3 — Tools Agent
 
 ## What it demonstrates
 The **ReAct loop** — LLM decides dynamically whether to call a tool or reply directly.
@@ -10,6 +10,28 @@ Introduces tool calling, `ToolNode`, and `tools_condition`.
 - `ToolNode` — prebuilt node that executes whichever tool the LLM requested
 - `tools_condition` — prebuilt routing function: routes to `"tools"` if LLM made a tool call, else to `END`
 - ReAct loop: `llm → tools → llm → tools → ... → END`
+
+---
+
+
+## How to build this agent
+
+### STEP 1  Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/tools_agent.py`
+
+### STEP 2  Build in Learn Mode
+Type this in GitHub Copilot Chat:
+```
+Learn Mode  I want to build 03 Tools Agent
+```
+Copilot will guide you block by block through each section below.
+
+### STEP 3  Test in Studio
+```powershell
+python studio.py
+```
+Select **Tools Agent** from the dropdown.
 
 ---
 
@@ -96,9 +118,16 @@ def build_graph():
 
 ---
 
-## Test checklist
-| Input | Expected output | What to watch in trace |
-|---|---|---|
-| `"What is 144 / 12?"` | `12` | `tool_call` (blue) → `tool_result` (purple) → `llm_response` |
-| `"What time is it?"` | Current time | Same 4-step pattern with `get_current_time` |
-| `"Who are you?"` | Explains Tools Agent | Direct: 2 steps only, no tool call |
+## Test Checklist
+
+| # | Input | Expected output | Trace expected |
+|---|---|---|---|
+| 1 | `"What is 144 / 12?"` | `12` | `node_exec` → `tool_call` → `tool_result` → `llm_response` (4 entries, `calculate` tool) |
+| 2 | `"What time is it?"` | Current time string | `node_exec` → `tool_call` → `tool_result` → `llm_response` (4 entries, `get_current_time` tool) |
+| 3 | `"Who are you?"` | Explains it is Tools Agent | `node_exec` → `llm_response` (2 entries only — no tool call) |
+
+**Why test #1:** Exercises the full ReAct loop — LLM decides to call `calculate`, `ToolNode` dispatches it, result comes back, LLM formats the answer. Without this test you never confirm the tool loop (`tools` → `llm`) closes correctly.
+
+**Why test #2:** Verifies a second tool with a completely different signature (`get_current_time` takes no arguments). Confirms `ToolNode` handles multiple tools and `tools_condition` consistently routes to the tool node.
+
+**Why test #3:** Verifies the path that does NOT trigger a tool call — the LLM answers directly from knowledge. Confirms `tools_condition` correctly routes to `END` when the LLM produces a plain `AIMessage` with no `tool_calls`.

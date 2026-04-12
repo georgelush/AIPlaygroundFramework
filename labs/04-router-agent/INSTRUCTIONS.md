@@ -1,4 +1,4 @@
-# Agent 4 — Router Agent
+﻿# Agent 4 — Router Agent
 
 ## What it demonstrates
 **Conditional branching** — a classifier node reads the input and decides which node runs next.
@@ -10,6 +10,28 @@ Different inputs take different paths through the graph.
 - Routing function — returns a node name string; LangGraph follows it
 - Multiple terminal nodes — each branch ends at `END` independently
 - `temperature=0.3` — low temperature for deterministic classification
+
+---
+
+
+## How to build this agent
+
+### STEP 1  Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/router_agent.py`
+
+### STEP 2  Build in Learn Mode
+Type this in GitHub Copilot Chat:
+```
+Learn Mode  I want to build 04 Router Agent
+```
+Copilot will guide you block by block through each section below.
+
+### STEP 3  Test in Studio
+```powershell
+python studio.py
+```
+Select **Router Agent** from the dropdown.
 
 ---
 
@@ -96,9 +118,16 @@ def build_graph():
 
 ---
 
-## Test checklist
-| Input | Route | What to watch in trace |
-|---|---|---|
-| `"What is LangGraph?"` | `question` → answer_question | Step 2 shows `Routed to: question` |
-| `"Hello!"` | `greeting` → greet | Step 2 shows `Routed to: greeting` |
-| `"Book me a flight to Paris"` | `other` → fallback | Step 2 shows `Routed to: other` |
+## Test Checklist
+
+| # | Input | Expected output | Trace expected |
+|---|---|---|---|
+| 1 | `"What is LangGraph?"` | Detailed LangGraph explanation | `node_exec` (classify) → `node_exec` (Routed to: question) → `llm_response` (answer_question node) |
+| 2 | `"Hello!"` | Friendly greeting | `node_exec` (classify) → `node_exec` (Routed to: greeting) → `llm_response` (greet node) |
+| 3 | `"Book me a flight to Paris"` | Polite decline, out-of-scope message | `node_exec` (classify) → `node_exec` (Routed to: other) → `llm_response` (fallback node) |
+
+**Why test #1:** Exercises the `question` branch — `classify` node routes to `answer_question`. Verifies `add_conditional_edges` reads `state["route"]` and follows the correct path. Without this, the routing function is never validated for the main use case.
+
+**Why test #2:** Exercises the `greeting` branch — confirms the classifier distinguishes social input from informational questions. Tests that `route_by_type` returns `"greet"` and the trace badge shows `Routed to: greeting`.
+
+**Why test #3:** Exercises the `other` / fallback branch — the safety net for unrecognised input. Confirms the guard clause (`if route not in ("question", "greeting", "other"): route = "other"`) and fallback node work correctly.

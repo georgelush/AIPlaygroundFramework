@@ -1,4 +1,4 @@
-# Agent 5 — Pipeline Agent
+﻿# Agent 5 — Pipeline Agent
 
 ## What it demonstrates
 **Deterministic sequential flow** — every node always runs in fixed order.
@@ -11,6 +11,28 @@ Key strength: each node can use a **different model** — cheap for mechanical s
 - Multiple state fields (`TypedDict` with 4 fields)
 - Fixed execution order — no `add_conditional_edges`
 - Per-node model assignment — `llm_fast` vs `llm_smart`
+
+---
+
+
+## How to build this agent
+
+### STEP 1  Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/pipeline_agent.py`
+
+### STEP 2  Build in Learn Mode
+Type this in GitHub Copilot Chat:
+```
+Learn Mode  I want to build 05 Pipeline Agent
+```
+Copilot will guide you block by block through each section below.
+
+### STEP 3  Test in Studio
+```powershell
+python studio.py
+```
+Select **Pipeline Agent** from the dropdown.
 
 ---
 
@@ -110,9 +132,16 @@ def build_graph():
 
 ---
 
-## Test checklist
-| Input | Expected output | What to watch in trace |
-|---|---|---|
-| `"Summarize this: The fox jumped over the dog."` | Summary/analysis | Step 1 model=gpt-5.4-nano, Step 3 model=gpt-5.1 |
-| `"Who are you?"` | Explains Pipeline Agent | All 3 steps always run even for simple questions |
-| `"What does each node do?"` | Explains extract/transform/respond | Verify 3 trace entries, different models |
+## Test Checklist
+
+| # | Input | Expected output | Trace expected |
+|---|---|---|---|
+| 1 | `"Summarize this: The fox jumped over the dog."` | Short summary or analysis | `node_exec` (extract, model=gpt-5.4-nano) → `node_exec` (transform, model=gpt-5.4-nano) → `llm_response` (respond, model=gpt-5.1) |
+| 2 | `"Who are you?"` | Explains it is Pipeline Agent | `node_exec` → `node_exec` → `llm_response` — all 3 nodes run even for a trivial question |
+| 3 | `"What does each node do?"` | Explains extract / transform / respond steps | `node_exec` → `node_exec` → `llm_response` — verify 3 entries with different model badges |
+
+**Why test #1:** The core pipeline test — confirms all 3 nodes run in sequence and that trace entries expose the model used per node. Without this, you cannot verify the cost-optimization split (`llm_fast` for extraction, `llm_smart` for the final response).
+
+**Why test #2:** Verifies there is no short-circuit — even a simple identity question goes through all 3 nodes. This distinguishes the pipeline pattern from a router: the pipeline never skips steps.
+
+**Why test #3:** Confirms state flows correctly across nodes — `node_extract` writes `state["extracted"]`, `node_transform` reads it and writes `state["transformed"]`, `node_respond` reads `state["transformed"]`. If any field name is mistyped, this test produces an incoherent answer.

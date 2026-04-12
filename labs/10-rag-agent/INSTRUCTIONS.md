@@ -1,4 +1,4 @@
-# Agent 10 — RAG Agent
+﻿# Agent 10 — RAG Agent
 
 ## What it demonstrates
 **Retrieval-Augmented Generation (RAG)** — instead of answering from the LLM's training memory,
@@ -110,6 +110,30 @@ labs/10-rag-agent/
     └── data/
         └── langgraph_concepts.txt  ← demo document (copy of src/data/)
 ```
+
+---
+
+
+## How to build this agent
+
+### STEP 1  Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/rag_agent.py`
+
+> Ensure src/data/langgraph_concepts.txt exists (it ships with the project).
+
+### STEP 2  Build in Learn Mode
+Type this in GitHub Copilot Chat:
+```
+Learn Mode  I want to build 10 RAG Agent
+```
+Copilot will guide you block by block through each section below.
+
+### STEP 3  Test in Studio
+```powershell
+python studio.py
+```
+Select **RAG Agent** from the dropdown.
 
 ---
 
@@ -328,7 +352,7 @@ def run_agent(payload: str) -> str:
 
 ### Trace structure — what every run produces
 
-Every query produces exactly **4 trace entries**:
+Every query produces exactly **4 trace entries:**
 
 | # | Label | Type | From → To | What it shows |
 |---|---|---|---|---|
@@ -337,74 +361,28 @@ Every query produces exactly **4 trace entries**:
 | 3 | `Generate` | `node_exec` | `llm → user` | The query again (passed into generate node) |
 | 4 | `LLM` | `llm_response` | `llm → user` | First 200 chars of the LLM answer |
 
-**How to validate:** Look at entry #2 (Context). Ask yourself — is the retrieved text relevant to the question?  
-If yes → the embedding model matched correctly. If entry #4 (LLM) answers from the context → RAG is working.
+---
+
+### Tests
+
+| # | Input | Expected output | Trace expected |
+|---|---|---|---|
+| 1 | `"What is a node in LangGraph?"` | Answer grounded in the document — mentions Python function, State, partial update | `node_exec` (Retrieve) → `tool_result` (Context, English chunks) → `node_exec` (Generate) → `llm_response` (LLM, factual answer) |
+| 2 | `"ce este un nod in LangGraph?"` *(Romanian)* | Answer **in Romanian** using English context chunks | `node_exec` (Retrieve) → `tool_result` (Context, **English** chunks despite Romanian query) → `node_exec` (Generate) → `llm_response` (Romanian answer) |
+| 3 | `"What is the capital of France?"` | LLM says it cannot answer — does **not** hallucinate "Paris" | `node_exec` (Retrieve) → `tool_result` (Context, irrelevant chunks) → `node_exec` (Generate) → `llm_response` (refusal) |
+| 4 | `"qu'est-ce qu'un outil dans LangGraph?"` *(French)* | Answer **in French** using English context chunks | `node_exec` (Retrieve) → `tool_result` (Context, English tool/decorator chunks) → `node_exec` (Generate) → `llm_response` (French answer) |
+
+**Why test #1:** The smoke test — confirms the basic RAG pipeline: Qdrant retrieves relevant chunks and the LLM uses them to answer. If this fails, check `DOCS_PATH` and `src/data/langgraph_concepts.txt`.
+
+**Why test #2:** The key multilingual test — `text-embedding-3-small` maps Romanian and English to the same semantic space, so a Romanian query retrieves English chunks. The LLM then responds in Romanian. This would completely fail with `fastembed` (no cross-language vector alignment).
+
+**Why test #3:** The grounding test — verifies the `SYSTEM_PROMPT` constraint ("only answer from the provided context"). If the agent answers "Paris", the system prompt is not working and the LLM falls back to its training data.
+
+**Why test #4:** Confirms multilingual support extends beyond one language pair. `text-embedding-3-small` handles 100+ languages in the same shared vector space. A French query correctly retrieves English tool documentation.
 
 ---
 
-### Test 1 — Basic English retrieval (smoke test)
-
-**Input:** `What is a node in LangGraph?`
-
-| What to check | Expected |
-|---|---|
-| Entry #1 label | `Retrieve` — shows the English query |
-| Entry #2 content | Contains text about "Python function", "State", "partial update" |
-| Entry #4 content | Answers using the context — does NOT invent new facts |
-
-> **Purpose:** Confirms the basic RAG pipeline works. If this fails, check `DOCS_PATH` and `src/data/`.
-
----
-
-### Test 2 — Cross-language retrieval (multilingual advantage)
-
-**Input:** `ce este un nod in LangGraph?` *(Romanian for "what is a node in LangGraph?")*
-
-| What to check | Expected |
-|---|---|
-| Entry #1 content | `ce este un nod in LangGraph?` — Romanian query |
-| Entry #2 content | **English text** — e.g. "A node is a Python function..." |
-| Entry #4 content | Answer **in Romanian** — using the English context |
-
-This is the most important test. The document is written in English.  
-The query is in Romanian. Yet `text-embedding-3-small` maps both to the same semantic space —  
-so Qdrant retrieves the correct English chunk, and the LLM responds in the user's language.
-
-> **This would completely fail with `fastembed`** — the Romanian words have no vector relationship  
-> to the English document. Qdrant would return irrelevant chunks, and the LLM would either  
-> hallucinate or say it doesn't know.
-
----
-
-### Test 3 — Out-of-scope question (grounding test)
-
-**Input:** `What is the capital of France?`
-
-| What to check | Expected |
-|---|---|
-| Entry #2 content | Irrelevant chunks — none mention France or capitals |
-| Entry #4 content | LLM says it **cannot answer** — it does not hallucinate "Paris" |
-
-> **Purpose:** Verifies the SYSTEM_PROMPT grounding works. The LLM must stay inside the context.  
-> If the agent answers "Paris" — the SYSTEM_PROMPT constraint is not working.
-
----
-
-### Test 4 — French query (second language proof)
-
-**Input:** `qu'est-ce qu'un outil dans LangGraph?` *(French for "what is a tool in LangGraph?")*
-
-| What to check | Expected |
-|---|---|
-| Entry #2 content | English text about tools, `@tool` decorator, docstrings |
-| Entry #4 content | Answer in French using the English context |
-
-> **Purpose:** Confirms multilingual support is not limited to one language pair.  
-> `text-embedding-3-small` handles 100+ languages using the same shared vector space.
-
----
-
-### Summary — fastembed vs text-embedding-3-small in practice
+### fastembed vs text-embedding-3-small comparison
 
 | Test | fastembed result | text-embedding-3-small result |
 |---|---|---|

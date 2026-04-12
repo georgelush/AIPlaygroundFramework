@@ -1,4 +1,4 @@
-# Agent 7 — Base Agent
+﻿# Agent 7 — Base Agent
 
 ## What it demonstrates
 **Production agent architecture** — a `BaseAgent` class built with three reusable mixin classes via multiple inheritance.
@@ -36,6 +36,28 @@ src/
 
 > The mixins live in `src/mixins/` and are **shared** across all agents.
 > Never copy mixin code into an agent — always import from `src.mixins`.
+
+---
+
+
+## How to build this agent
+
+### STEP 1  Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/base_agent.py`
+
+### STEP 2  Build in Learn Mode
+Type this in GitHub Copilot Chat:
+```
+Learn Mode  I want to build 07 Base Agent
+```
+Copilot will guide you block by block through each section below.
+
+### STEP 3  Test in Studio
+```powershell
+python studio.py
+```
+Select **Base Agent** from the dropdown.
 
 ---
 
@@ -234,8 +256,15 @@ def run_agent(payload) -> str:
 ---
 
 ## Test Checklist — Base Agent
-| Input | Expected output | What to watch in trace |
-|---|---|---|
-| `Hi, who are you and what do you demonstrate?` | Agent describes itself — mentions CostTrackingMixin, LoggingMixin, AuthMixin, multiple inheritance | `#01 INPUT` contains your message; `#02 node_llm` shows `user=anonymous \| role=user`; `#03 LLM` has the green cost badge with token counts |
-| `What is the weather forecast for tomorrow?` | Politely refuses and redirects to agent topics | Same 3 steps — cost badge appears regardless of response |
-| `{"message": "Explain AuthMixin", "user_id": "<your-name>", "role": "admin"}` | Explains AuthMixin in detail | `#02 node_llm` shows `user=<your-name> \| role=admin` — confirms JSON parsing + set_auth_context worked |
+
+| # | Input | Expected output | Trace expected |
+|---|---|---|---|
+| 1 | `"Hi, who are you and what do you demonstrate?"` | Describes CostTrackingMixin, LoggingMixin, AuthMixin and multiple inheritance | `node_exec` (INPUT) → `node_exec` (node_llm, `user=anonymous \| role=user`) → `llm_response` (LLM, green cost badge with token counts) |
+| 2 | `"What is the weather forecast for tomorrow?"` | Politely refuses and redirects to agent topics | `node_exec` → `node_exec` → `llm_response` — cost badge appears regardless of response type |
+| 3 | `{"message": "Explain AuthMixin", "user_id": "alice", "role": "admin"}` | Explains `AuthMixin` in detail | `node_exec` → `node_exec` (`user=alice \| role=admin`) → `llm_response` — confirms JSON parsing + `set_auth_context` worked |
+
+**Why test #1:** The baseline — confirms all three mixins initialise, the `node_llm` uses `anonymous` + `user` defaults when no `user_id`/`role` is in the payload, and the cost badge appears in the trace with actual token counts.
+
+**Why test #2:** Verifies the `SYSTEM_PROMPT` restriction. Even when the answer is a refusal, the cost badge still appears. This confirms `CostTrackingMixin` records every LLM call regardless of whether the agent answered with useful content.
+
+**Why test #3:** The critical `AuthMixin` test — verifies that a JSON payload with `user_id` and `role` fields is parsed and forwarded via `set_auth_context`. Without this, the `user=` and `role=` fields in the trace would remain `anonymous` / `user` for every request.

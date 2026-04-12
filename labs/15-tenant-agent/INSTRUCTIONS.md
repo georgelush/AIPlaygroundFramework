@@ -161,34 +161,42 @@ def run_agent(payload) -> str:
 
 ---
 
-## Setup
+## How to build this agent
 
-No extra infrastructure required.
+### STEP 1 — Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/tenant_agent.py`
 
+### STEP 2 — Build in Learn Mode
+Type this in GitHub Copilot Chat:
 ```
-1. Copy solution file:
-   From: labs/15-tenant-agent/solution/tenant_agent.py
-   To:   src/agents/tenant_agent.py
-
-2. Start Studio:
-   python studio.py
-
-3. Select "Multi-Tenant Agent" from the dropdown
+Learn Mode — I want to build 15 Tenant Agent
 ```
+Copilot will guide you block by block through the full implementation.
+
+### STEP 3 — Test in Studio
+```powershell
+python studio.py
+```
+Select **Multi-Tenant Agent** from the dropdown.
 
 ---
 
 ## Test Checklist — Multi-Tenant Agent
 
-| # | Input | Expected output | Code path covered |
+| # | Input | Expected output | Trace expected |
 |---|---|---|---|
-| 1 | `{"message": "What is multi-tenancy?", "user_id": "user_42", "session_id": "s1"}` | Informative answer about multi-tenancy | `check_quota → llm` (budget ok) — trace shows `thread_id=user_42:s1` |
-| 2 | `{"message": "What is my quota?", "user_id": "user_42", "session_id": "s1"}` | Answer mentioning budget info (used/5000) | `check_quota → llm` with context injection visible in trace |
-| 3 | `{"message": "Hello", "user_id": "user_42", "session_id": "s2"}` | Normal answer — different thread than test #1 | thread_id=`user_42:s2` — same user, new session = isolated checkpoint |
-| 4 | `{"message": "Hello", "user_id": "user_99", "session_id": "s1"}` | Normal answer — separate budget from user_42 | thread_id=`user_99:s1` — different user, budget isolation confirmed |
-| 5 | Send 30+ messages with `user_id: "user_42"` until budget exhausted | `"Quota exceeded for user 'user_42'..."` | `check_quota → quota_exceeded` — LLM entry must NOT appear in trace |
-| 6 | `{"message": "Hello", "user_id": "user_99"}` after user_42 is blocked | Normal response | user_99 unaffected — isolation confirmed |
-| 7 | `"Hello"` (plain string, no user_id) | Normal response | Fallback to `anonymous:default` |
+| 1 | `{"message": "What is multi-tenancy?", "user_id": "user_42", "session_id": "s1"}` | Informative answer about multi-tenancy | `node_exec` (Thread, `thread_id=user_42:s1`) → `node_exec` (Quota Check, budget ok) → `llm_response` (LLM) |
+| 2 | `{"message": "What is my quota?", "user_id": "user_42", "session_id": "s1"}` | Answer mentioning budget info (used/5000) | `node_exec` (Thread) → `node_exec` (Quota Check, context injection visible) → `llm_response` (LLM) |
+| 3 | `{"message": "Hello", "user_id": "user_42", "session_id": "s2"}` | Normal answer | `node_exec` (Thread, `thread_id=user_42:s2`) → `node_exec` (Quota Check) → `llm_response` — same user, new session, isolated checkpoint |
+| 4 | `{"message": "Hello", "user_id": "user_99", "session_id": "s1"}` | Normal answer | `node_exec` (Thread, `thread_id=user_99:s1`) → `node_exec` (Quota Check) → `llm_response` — separate budget from user_42 |
+| 5 | Send 30+ messages with `user_id: "user_42"` until budget exhausted | `"Quota exceeded for user 'user_42'..."` | `node_exec` (Thread) → `node_exec` (Quota Check) → `node_exec` (Quota Exceeded) — no `llm_response` entry |
+| 6 | `{"message": "Hello", "user_id": "user_99"}` after user_42 is blocked | Normal response | `node_exec` → `node_exec` (Quota Check, budget ok) → `llm_response` — user_99 unaffected |
+| 7 | `"Hello"` (plain string, no user_id) | Normal response | `node_exec` (Thread, `thread_id=anonymous:default`) → `node_exec` → `llm_response` |
+
+**Why test #1:** The baseline smoke test — confirms `user_id` + `session_id` are parsed from the JSON payload and combined into `thread_id=user_42:s1`. The Thread trace entry must show the correct `thread_id` so you know namespacing is working from the first call.
+
+**Why test #2:** Verifies context injection — the agent prepends user budget info to the HumanMessage so the LLM can answer questions like "what is my quota?". Without this, the LLM has no knowledge of per-user state.
 
 **Why test #3 (namespacing):** `user_42:s1` and `user_42:s2` are different thread_ids → different checkpoints in `MemorySaver`. This proves that the same user in a new session starts fresh — they don't inherit the previous session's state. Watch the **Thread** trace entry — it must show the correct `thread_id` for each call.
 
@@ -197,6 +205,8 @@ No extra infrastructure required.
 **Why test #5:** Verifies quota enforcement — after budget exhaustion, `node_quota_exceeded` must fire and LLM trace entry must NOT appear.
 
 **Why test #6:** This is the critical isolation test — proves that user_42 exhausting their budget has zero effect on user_99.
+
+**Why test #7:** Verifies the fallback path — a plain string without JSON fields falls back to `anonymous:default` thread_id. Without this guard, sending a plain string would raise a `KeyError` on `payload["user_id"]`.
 
 **What to watch in trace for test #5:**
 - Only `Thread`, `Quota Check` and `Quota Exceeded` entries — no `LLM` entry

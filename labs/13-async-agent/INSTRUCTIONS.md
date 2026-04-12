@@ -208,16 +208,23 @@ Open **http://localhost:8000** → select **Async Agent**
 
 ### Test Checklist
 
-| # | Concept | Input | Expected output | Trace badge |
-|---|---|---|---|---|
-| 1 | `job_id` + `ainvoke()` + `background task` | `Explain what ainvoke does in LangGraph` | `Job started...` + Job ID shown — response in **< 1 second** | `START` → content contains `ainvoke() started in background thread` |
-| 2 | `polling` — in progress | `job:<uuid_from_test1>` (immediately after Test 1, < 15s) | `Still processing...` | `POLL` → `status=running` |
-| 3 | `polling` — final result | `job:<uuid_from_test1>` (after **20+ seconds** from Test 1) | Full LLM response as plain text | `POLL` → `status=done` |
-| 4 | `webhook callback` (blocking) | `webhook:process quarterly report` | `Webhook activated — POST alert sent.` after **~5 seconds** | **2 badges** in order: `WEBHOOK` → `WEBHOOK FIRED` |
-| 5 | `Redis TTL` (expired/unknown job) | `job:00000000-0000-0000-0000-000000000000` | `Job not found in Redis...` | `POLL` → `not found in Redis` |
+| # | Input | Expected output | Trace expected |
+|---|---|---|---|
+| 1 | `"Explain what ainvoke does in LangGraph"` | `"Job started..."` + Job ID returned in **< 1 second** | `node_exec` (START) → content contains `ainvoke() started in background thread` |
+| 2 | `"job:<uuid_from_test1>"` (immediately, < 15s) | `"Still processing..."` | `node_exec` (POLL) → `status=running` |
+| 3 | `"job:<uuid_from_test1>"` (after **20+ seconds**) | Full LLM response as plain text | `node_exec` (POLL) → `status=done` + LLM text in content |
+| 4 | `"webhook:process quarterly report"` | `"Webhook activated — POST alert sent."` after **~5 seconds** | `node_exec` (WEBHOOK) → `node_exec` (WEBHOOK FIRED) — 2 entries, UI frozen during wait |
+| 5 | `"job:00000000-0000-0000-0000-000000000000"` | `"Job not found in Redis — it may have expired (TTL: 1 hour)..."` | `node_exec` (POLL) → `not found in Redis` |
 
-> **Test 4:** The UI is **completely frozen for 5 seconds** — you cannot send any message during that time.
-> This is the key educational point: contrast with Test 1, which returns immediately and keeps the UI responsive.
+**Why test #1:** The non-blocking proof — response must arrive in under 1 second. If it takes longer, Redis is not running (`docker compose up -d redis`). Confirms `ainvoke()` fires in a background thread and `job_id` is returned immediately.
+
+**Why test #2:** Confirms Redis holds `status=running` while the background thread is still executing. The same `job_id` is used for tests #2 and #3 — proving that polling reads **live state** from Redis between calls.
+
+**Why test #3:** Confirms the job completes and `status=done` is set in Redis with the LLM result. The full response is returned without any prefix — raw result from the background thread.
+
+**Why test #4:** The blocking contrast — the UI is **completely frozen for ~5 seconds** during webhook execution. This is the key educational point: compare with test #1 which returns in < 1 second. Demonstrates why `ainvoke()` is preferred in production.
+
+**Why test #5:** Verifies Redis TTL handling — a non-existent or expired `job_id` returns a clear error message. Without this, the agent would raise a `KeyError` or crash on `None`.
 
 ---
 
@@ -239,26 +246,6 @@ Expected output from `GET`:
 ```
 
 `TTL` shows seconds remaining until the job expires (max 3600 = 1 hour).
-
----
-
-## STEP 7 — Concept Verification Table
-
-Run each test in order in Studio UI. Use the **Job ID** from Test 1 for Tests 2 and 3.
-
-| # | Concept verified | Input to send | Expected output in chat | What to check in Trace |
-|---|---|---|---|---|
-| 1 | `job_id` + `ainvoke()` + `background task` | `Explain what ainvoke does in LangGraph` | `Job started — processing in background...` + **Job ID** displayed — response in **< 1 second** | Badge `START` → content contains `ainvoke() started in background thread` |
-| 2 | `polling` — in progress | `job:<uuid_from_test1>` (immediately after Test 1, < 15s) | `Still processing... ainvoke() is running in background.` | Badge `POLL` → `status=running` |
-| 3 | `polling` — final result | `job:<uuid_from_test1>` (after **20+ seconds** from Test 1) | Full LLM response as plain text, no prefix | Badge `POLL` → `status=done` + LLM text in content |
-| 4 | `webhook callback` (blocking) | `webhook:process quarterly report` | `Webhook activated — POST alert sent.` — after **~5 seconds** | **2 badges** in order: `WEBHOOK` → `WEBHOOK FIRED` |
-| 5 | `Redis TTL` (expired/unknown job) | `job:00000000-0000-0000-0000-000000000000` | `Job not found in Redis — it may have expired (TTL: 1 hour)...` | Badge `POLL` → `not found in Redis` |
-
-> **Test 1** — if the response takes more than 2 seconds, Redis is not running. Run `docker compose up -d redis` and try again.
->
-> **Test 4** — during the 5 seconds, the UI is **completely frozen** — you cannot send any message. This is the key educational point: Test 1 returns immediately and keeps the UI responsive.
->
-> **Test 2 vs Test 3** — same `job:<id>`, different result depending on when you send it. This proves that polling reads the **live state** from Redis.
 
 ---
 

@@ -403,7 +403,7 @@ footer { display: none !important; }
 
 .chatbot-box code {
     background: #0a081e !important;
-    color: #7c6fe0 !important;
+    color: #c8c4ff !important;
     border: 1px solid #1e1a40 !important;
     border-radius: 4px !important;
     padding: 1px 6px !important;
@@ -413,6 +413,7 @@ footer { display: none !important; }
 .chatbot-box pre {
     background: #0a081e !important;
     border: 1px solid #1e1a40 !important;
+    color: #e2e8f0 !important;
     border-radius: 8px !important;
     padding: 12px !important;
 }

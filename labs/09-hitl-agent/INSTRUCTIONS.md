@@ -1,4 +1,4 @@
-# Agent 9 — HITL Agent
+﻿# Agent 9 — HITL Agent
 
 ## What it demonstrates
 **Human-in-the-Loop execution** — the agent detects sensitive actions (delete, deploy, reset) and **pauses the graph** using `interrupt()` before executing. A human must explicitly approve or reject. The approval gate persists across server restarts via `SqliteSaver`.
@@ -60,6 +60,28 @@ src/
     └── hitl_agent.py     ← the agent (registered in Studio)
 memory.db                 ← shared with Lab 08, created automatically
 ```
+
+---
+
+
+## How to build this agent
+
+### STEP 1  Create the agent file
+Create this file and leave it completely empty:
+**Path:** `src/agents/hitl_agent.py`
+
+### STEP 2  Build in Learn Mode
+Type this in GitHub Copilot Chat:
+```
+Learn Mode  I want to build 09 HITL Agent
+```
+Copilot will guide you block by block through each section below.
+
+### STEP 3  Test in Studio
+```powershell
+python studio.py
+```
+Select **HITL Agent** from the dropdown.
 
 ---
 
@@ -173,12 +195,20 @@ def run_agent(payload) -> str:
 
 ## Test Checklist — HITL Agent
 
-| Input | Expected output | What to check in trace |
-|---|---|---|
-| `"Hello, how do you work?"` | Normal response without approval | `node_detect` without interrupt → `node_chat` with LLM response |
-| `"delete all files"` | Agent stops and requests approval | `node_detect` → `HITL` suspended |
-| `"approve"` (same tab, no restart) | `"Approved. Executing: delete all files"` | `HITL` with `human decision: approve` |
-| `"delete the database"` + restart Studio + `"reject"` | `"Action rejected. Nothing was executed."` | `HITL` with `human decision: reject` — restored from `memory.db` |
+| # | Input | Expected output | Trace expected |
+|---|---|---|---|
+| 1 | `"Hello, how do you work?"` | Normal conversational response, no pause | `node_exec` (detect — no interrupt) → `node_exec` (chat) → `llm_response` |
+| 2 | `"delete all files"` | "Action pending approval. Reply approve or reject." | `node_exec` (detect) → `node_exec` (HITL suspended) — graph pauses, no `llm_response` yet |
+| 3 | `"approve"` (same tab, immediately after test 2) | `"Approved. Executing: delete all files"` | `node_exec` (HITL resumed, `human decision: approve`) → `llm_response` |
+| 4 | `"delete the database"` → restart Studio → `"reject"` | `"Action rejected. Nothing was executed."` | `node_exec` (HITL restored from `memory.db`, `human decision: reject`) → `llm_response` |
+
+**Why test #1:** Verifies the happy path — non-sensitive inputs skip the interrupt entirely. Confirms `node_detect` classifies normal messages correctly and routes straight to `node_chat`.
+
+**Why test #2:** Verifies the interrupt mechanism — `interrupt()` suspends the graph mid-run. The trace has no `llm_response` because execution is paused. Without this test, you never confirm the dangerous-action detection triggers correctly.
+
+**Why test #3:** Verifies the graph resumes from the same `thread_id` when the user replies `"approve"`. Confirms `Command(resume=)` is invoked and the approve branch runs. Without persistence this would fail — but here it works because `SqliteSaver` held the state between turns.
+
+**Why test #4:** The cornerstone test of this lab — it proves the checkpoint survives a full server restart. Stop Studio after test trigger, restart, send `"reject"`. Without `SqliteSaver`, the checkpoint is gone and `"reject"` has nothing to resume.
 
 ---
 

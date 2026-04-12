@@ -18,3 +18,4 @@ langchain-community>=0.3.0
 pypdf>=4.0.0
 fastembed>=0.4.0
 redis>=5.0.0
+langgraph-checkpoint-redis>=0.0.2
