@@ -52,7 +52,7 @@ Agentic-AI-Playground/
 │   ├── mixins/          # Reusable mixins (CostTrackingMixin, LoggingMixin, AuthMixin)
 │   ├── config.py        # LLM client, Langfuse handler, env vars
 │   └── registry.py      # Agent auto-discovery
-├── labs/                # 20-lab curriculum (01–17 ✅  |  18–20 🔜)
+├── labs/                # 20-lab curriculum (01–20 ✅)
 │   ├── README.md
 │   ├── GETTING_STARTED.md
 │   └── 01–20/           # each lab: INSTRUCTIONS.md + solution/xx_agent.py
@@ -131,17 +131,19 @@ POST http://localhost:8080/run
 
 | Library / Tool | Version | Role | First used |
 |---|---|---|---|
-| LangGraph | 1.1.3 | Agent graphs, StateGraph, ToolNode | Lab 02 |
-| LangChain | — | ChatOpenAI, bind_tools, message types | Lab 01 |
-| FastAPI + uvicorn | — | REST API server | framework |
-| Gradio | 6.x | Studio debug UI | framework |
-| Langfuse | — | LLM observability and tracing | framework |
+| LangGraph | 1.1.3+ | Agent graphs, StateGraph, ToolNode | Lab 02 |
+| LangChain | 0.3.0+ | ChatOpenAI, bind_tools, message types | Lab 01 |
+| FastAPI + uvicorn | 0.115.0+ | REST API server | framework |
+| Gradio | 6.0+ | Studio debug UI | framework |
+| Langfuse | 4.0.0+ | LLM observability and tracing | framework |
 | LiteLLM proxy | — | LLM gateway (model: gpt-5.4-nano) | framework |
 | SQLite + SqliteSaver | — | Persistent graph checkpoints between sessions | Lab 08 |
 | Pydantic | 2.x | Structured output schema validation | Lab 12 |
-| Qdrant | — | In-memory vector store for RAG pipeline | Lab 10 |
-| Redis | 5.x | Job store — async task results with TTL | Lab 13 |
-| Docker Desktop | — | Container runtime for Redis and services | Lab 13 |
+| Qdrant | 1.9.0+ | In-memory vector store for RAG pipeline | Lab 10 |
+| fastembed | 0.4.0+ | Local embedding model — no OpenAI key needed for RAG | Lab 10 |
+| Redis | 5.0+ | Async job store (TTL) + HITL graph checkpointer | Lab 13 |
+| langgraph-checkpoint-redis | — | Redis-backed LangGraph state persistence | Lab 20 |
+| Docker Desktop | — | Container runtime for Redis | Lab 13 |
 | asyncio | stdlib | Async coroutines, event loop, `ainvoke()` | Lab 13 |
 
 ---

@@ -12,7 +12,7 @@ This curriculum is designed for mixed-experience teams: developers who know Pyth
 
 **Module 2 — Production Patterns (Labs 07–13)** ✅ complete.
 
-**Module 3 — Enterprise & Deploy (Labs 14–20)** 📋 in progress — Labs 14–17 ✅ complete.
+**Module 3 — Enterprise & Deploy (Labs 14–20)** ✅ complete.
 
 Each lab introduces one new LangGraph pattern. By Lab 06, you will have built a fully working multi-agent supervisor system from scratch.
 
@@ -54,19 +54,23 @@ No prior LangGraph knowledge required. The framework setup is covered in Lab 01.
 | 10 | RAG Agent | RAG pipeline — text-embedding-3-small, Qdrant in-memory, cross-lingual retrieval | 60–80 min |
 | 11 | Streaming Agent | Token streaming — llm.stream(), Generator, yield, Gradio incremental output | 30–45 min |
 | 12 | Structured Agent | Structured output — Pydantic models, with_structured_output(), guaranteed JSON | 30–45 min |
-| 13 | Async Agent | Async + polling — job_id, ainvoke(), background task, Redis TTL, webhook callback | 60–80 min |
+| 13 | Async Agent | Async + polling — `job_id`, `ainvoke()`, background task, Redis TTL, webhook callback | 60–80 min ⚠️ Docker |
 
-### Module 3 — Enterprise & Deploy 📋
+> ⚠️ Lab 13 requires Docker: run `docker compose up -d redis` before starting Studio.
 
-| # | File | Pattern introduced | New Concepts | Time |
-|---|---|---|---|---|
-| 14 | `secure_agent.py` | Security | Prompt injection detection, input validation, output sanitization | 40–55 min |
-| 15 | `tenant_agent.py` | Multi-tenant | Budget isolation per user, thread_id namespacing, quota enforcement | 40–55 min |
-| 16 | `auth_agent.py` | SSO / Active Directory | Identity context, role-based access, per-call audit trail | 40–55 min |
-| 17 | `approval_agent.py` | Approval workflow | HITL for sensitive operations, manager sign-off, escalation path | 50–70 min |
-| 18 | `test_agent.py` | Testing | pytest, LLM mock, Langfuse batch evals, regression checks | 60–80 min |
-| 19 | `deploy_agent.py` | Deploy | Docker, Azure Container Apps, n8n integration, on-prem config | 60–80 min |
-| 20 | `capstone_agent.py` | Capstone | Full-stack agent combining all patterns — security, multi-tenancy, HITL, RAG, async, structured output | 90–120 min |
+### Module 3 — Enterprise & Deploy ✅
+
+| # | Title | Pattern introduced | Time |
+|---|---|---|---|
+| 14 | Secure Agent | Security gate — prompt injection detection, input sanitization, output validation | 40–55 min |
+| 15 | Tenant Agent | Multi-tenant — budget isolation per user, `thread_id` namespacing, quota enforcement | 40–55 min |
+| 16 | Auth Agent | RBAC — identity context, role-based access, per-call audit trail, `@user` Studio format | 40–55 min |
+| 17 | Approval Agent | Approval workflow — HITL gate for sensitive ops, in-memory pending queue, manager sign-off | 50–70 min |
+| 18 | Test Agent | Automated testing — `pkgutil` auto-discovery, `MagicMock`, `patch`, contract and trace assertions | 60–80 min |
+| 19 | Deploy Agent | REST deploy — server status introspection, health check, VS Code port forwarding, n8n HTTP Request | 60–80 min |
+| 20 | Capstone Agent | Capstone — multi-file architecture, RAG + Redis HITL checkpointer + dual-LLM + multi-tenant budget | 80–100 min ⚠️ Docker |
+
+> ⚠️ Lab 20 requires Docker: run `docker compose up -d redis` before starting Studio.
 
 ---
 
@@ -149,9 +153,24 @@ labs/
 │   ├── INSTRUCTIONS.md
 │   └── solution/
 │       └── approval_agent.py
-├── 18-test-agent/                     📋
-├── 19-deploy-agent/                   📋
-└── 20-capstone-agent/                 📋
+├── 18-test-agent/                     ✅
+│   ├── INSTRUCTIONS.md
+│   └── solution/
+│       └── test_agent.py
+├── 19-deploy-agent/                   ✅
+│   ├── INSTRUCTIONS.md
+│   └── solution/
+│       └── deploy_agent.py
+└── 20-capstone-agent/                 ✅  ⚠️ docker compose up -d redis
+    ├── INSTRUCTIONS.md
+    └── solution/
+        ├── capstone_agent.py
+        ├── tools/
+        │   └── hr_tools.py
+        ├── nodes/
+        │   └── hr_nodes.py
+        └── graphs/
+            └── hr_graph.py
 ```
 
 Each lab folder contains:
@@ -254,6 +273,10 @@ This mode is enforced in `.github/copilot-instructions.md` — it activates auto
 | Gate node pattern, `security_error`, prompt injection detection, input validation, output sanitization | Lab 14 |
 | Budget isolation, `quota_error`, `thread_id` namespacing, in-memory tenant storage, context injection | Lab 15 |
 | RBAC, `auth_error`, `ROLE_PERMISSIONS`, `audit_log`, `_detect_action`, `@user message` Studio format | Lab 16 |
+| `interrupt()`, `Command(resume=)`, manager approval gate, escalation path, sensitive operation detection | Lab 17 |
+| `pkgutil` agent auto-discovery, `MagicMock`, `patch`, contract validation, trace assertions | Lab 18 |
+| FastAPI REST server, LangGraph Platform standard, port tunneling via VS Code Dev Tunnels, n8n integration | Lab 19 |
+| Multi-file architecture (`src/tools/`, `src/nodes/`, `src/graphs/`), Redis HITL checkpointer, dual-LLM classifier, multi-tenant token budget, self-approval gate | Lab 20 |
 
 ---
 
