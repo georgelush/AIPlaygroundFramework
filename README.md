@@ -145,6 +145,10 @@ POST http://localhost:8080/run
 | langgraph-checkpoint-redis | — | Redis-backed LangGraph state persistence | Lab 20 |
 | Docker Desktop | — | Container runtime for Redis | Lab 13 |
 | asyncio | stdlib | Async coroutines, event loop, `ainvoke()` | Lab 13 |
+| re | stdlib | Prompt injection detection, input validation patterns | Lab 14 |
+| uuid + datetime | stdlib | Request IDs, timestamps, audit trail entries | Lab 16 |
+| unittest.mock | stdlib | `MagicMock`, `patch` — mock LLM, contract and trace assertions | Lab 18 |
+| httpx | — | HTTP client for LLM proxy health checks and REST introspection | Lab 19 |
 
 ---
 
