@@ -194,7 +194,7 @@ def run_agent(payload) -> str:
     if rm:
         if role != "admin":
             record_audit(user_id, role, "ask_admin", "denied")
-            return f"Access denied. Only admins can reset budgets."
+            return "Access denied. Only admins can reset budgets."
         target = rm.group(1).lower()
         if target == "all":
             keys = _redis.keys("hr:budget:*")
@@ -204,7 +204,7 @@ def run_agent(payload) -> str:
             record_audit(user_id, role, "reset_budget", f"all ({deleted} users)")
             trace_log.append({
                 "type": "node_exec",
-                "label": f"Budget Reset [ALL]",
+                "label": "Budget Reset [ALL]",
                 "from": "admin",
                 "to": "redis",
                 "arrow": "->",
@@ -239,7 +239,7 @@ def run_agent(payload) -> str:
         record_audit(user_id, role, "reset_requests", f"all ({deleted} requests)")
         trace_log.append({
             "type": "node_exec",
-            "label": f"Requests Reset [ALL]",
+            "label": "Requests Reset [ALL]",
             "from": "admin",
             "to": "redis",
             "arrow": "->",
