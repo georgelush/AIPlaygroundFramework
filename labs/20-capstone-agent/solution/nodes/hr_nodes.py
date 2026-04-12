@@ -4,6 +4,7 @@ LLM instantiation and node logic live here  imported by src/graphs/hr_graph.py.
 """
 import re
 import json
+import openai
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage, AIMessage
 from langchain_core.runnables import RunnableConfig
@@ -197,7 +198,7 @@ llm_classify_with_tools = llm_classify.bind_tools(TOOLS)
 # == Nodes ======================================================================
 
 
-def node_llm(state: MessagesState) -> dict:
+def node_llm(state: MessagesState, config: RunnableConfig) -> dict:
     """Main LLM node.
     - Detects ToolMessage results from previous tool calls -> appends tool_result to _node_trace.
     - Calls LLM with tools bound.
@@ -236,7 +237,39 @@ def node_llm(state: MessagesState) -> dict:
         active_llm   = llm_classify_with_tools
         active_model = LLM_CLASSIFY_MODEL
 
-    response = active_llm.invoke(messages, config={"callbacks": [langfuse_handler]})
+    try:
+        response = active_llm.invoke(messages, config={"callbacks": [langfuse_handler]})
+    except openai.BadRequestError as exc:
+        detail = str(exc)
+        if "content_filter" in detail or "ContentPolicyViolation" in detail:
+            fallback = (
+                "I'm sorry, the content moderation filter blocked my response. "
+                "Please try rephrasing your question or contact HR directly at hr@company.com."
+            )
+            return {"messages": state["messages"] + [AIMessage(content=fallback)]}
+        raise
+
+    # ── RBAC enforcement on tool calls (defense in depth) ─────────────────────────────
+    # The boundary check in run_agent() blocks most unauthorized requests.
+    # This second check catches edge cases where _detect_action misclassified the intent
+    # and the LLM resolved to a tool the user's role is not allowed to use.
+    allowed_tool_names = set(config.get("configurable", {}).get("allowed_tool_names", []))
+    if allowed_tool_names and hasattr(response, "tool_calls") and response.tool_calls:
+        unauthorized = [tc["name"] for tc in response.tool_calls if tc["name"] not in allowed_tool_names]
+        if unauthorized:
+            _node_trace.append({
+                "type": "node_exec",
+                "label": "RBAC Blocked",
+                "from": "node_llm",
+                "to": "user",
+                "arrow": "->",
+                "content": f"Unauthorized tool call blocked: {unauthorized}",
+            })
+            return {
+                "messages": state["messages"] + [
+                    AIMessage(content="Access denied. You do not have permission to perform that action. Contact your manager.")
+                ]
+            }
 
     # Track token cost for this LLM call
     usage = _cost_tracker.track_usage(response, model=active_model)

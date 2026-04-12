@@ -97,12 +97,29 @@ def has_permission(role: str, action: str) -> bool:
     return action in ROLE_PERMISSIONS.get(role, [])
 
 
+# Maps RBAC action names → actual tool function names exposed to the LLM.
+# Used to compute allowed_tool_names per role and enforce inside node_llm.
+ACTION_TO_TOOLS: dict[str, list[str]] = {
+    "ask_hr":           ["search_hr_handbook"],
+    "calculate_days":   ["calculate_leave_days"],
+    "submit_vacation":  ["submit_vacation_request"],
+    "approve_vacation": [],
+    "ask_admin":        [],
+}
+
+
 def _detect_action(message: str) -> str:
     """Infers the intended action from the message content for RBAC enforcement."""
     lower = message.strip().lower()
     if re.match(r"^(approve|reject)\b", lower):
         return "approve_vacation"
-    if re.search(r"\b(submit|request|book).{0,20}vacation|vacation.{0,20}(request|days off)", lower):
+    # Match any variant of requesting/wanting/booking/taking vacation time
+    if re.search(
+        r"\b(submit|request|book|take|want|need|plan).{0,30}vacation"
+        r"|vacation.{0,30}(request|days off|from|days)"
+        r"|\b(days? off|time off|leave).{0,20}(from|starting|between)",
+        lower,
+    ):
         return "submit_vacation"
     if re.search(r"\b(how many (working )?days|calculate|count days)\b", lower):
         return "calculate_days"
@@ -143,7 +160,16 @@ def run_agent(payload) -> str:
         user_input = parts[1] if len(parts) > 1 else ""
 
     role = get_role(user_id)
-    config = {"configurable": {"thread_id": thread_id}}
+
+    # Compute the set of tool function names this role is allowed to invoke.
+    # Passed into the graph so node_llm can enforce RBAC on tool calls (defense in depth).
+    permissions = ROLE_PERMISSIONS.get(role, [])
+    allowed_tool_names = [
+        tool_name
+        for perm in permissions
+        for tool_name in ACTION_TO_TOOLS.get(perm, [])
+    ]
+    config = {"configurable": {"thread_id": thread_id, "allowed_tool_names": allowed_tool_names}}
 
     # ── Security validation at system boundary (Lab 14 pattern) ─────────────────────────
     validation_error = validate_input(user_input)
