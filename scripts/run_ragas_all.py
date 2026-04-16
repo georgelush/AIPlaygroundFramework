@@ -4,7 +4,7 @@ RAGAS evaluation script  runs automatically on all RAG agents found in Langfuse.
 Usage:
     python scripts/run_ragas_all.py
     python scripts/run_ragas_all.py --limit 20
-    python scripts/run_ragas_all.py --tags hr-assistant            # new agent, first run
+    python scripts/run_ragas_all.py --tags hr-assistant            # force specific tag (optional override)
     python scripts/run_ragas_all.py --skip rag-agent-test          # skip specific tags
 """
 import sys
@@ -38,6 +38,7 @@ _llm_judge = ChatOpenAI(
     base_url=_LLM_PROXY,
     api_key=_LLM_API_KEY,
     temperature=0.0,
+    request_timeout=30,  # fail fast if LLM proxy is unresponsive
 )
 
 #  Judge prompts 
@@ -85,7 +86,8 @@ Respond ONLY with valid JSON: {{"score": <0.0-1.0>, "reason": "<one sentence>"}}
 
 #  LLM judge 
 
-def _judge(prompt: str) -> dict:
+def _judge(prompt: str) -> dict | None:
+    """Returns None on error/timeout so the trace is skipped, not scored 0."""
     try:
         response = _llm_judge.invoke([
             SystemMessage(content="You are a precise evaluation judge. Respond only with valid JSON."),
@@ -95,9 +97,9 @@ def _judge(prompt: str) -> dict:
         m = re.search(r"\{.*\}", text, re.DOTALL)
         if m:
             return json.loads(m.group(0))
-        return {"score": 0.0, "reason": "parse error"}
-    except Exception as exc:
-        return {"score": 0.0, "reason": f"error: {exc}"}
+        return None
+    except Exception:
+        return None
 
 
 #  Langfuse REST helpers 
@@ -206,11 +208,19 @@ def _evaluate_trace(trace_id: str, qa: dict, agent_tag: str) -> dict:
     r_result  = _judge(_RELEVANCY_PROMPT.format(question=q, answer=ans))
     p_result  = _judge(_PRECISION_PROMPT.format(question=q, context=ctx))
     gt_result = _judge(_GROUND_TRUTH_PROMPT.format(question=q, context=ctx))
+
+    # Skip trace entirely if any judge call failed — no fake 0.0 scores
+    if not f_result or not r_result or not p_result or not gt_result:
+        return None
+
     ground_truth = gt_result.get("ground_truth", "")
     if ground_truth:
         rc_result = _judge(_RECALL_PROMPT.format(question=q, ground_truth=ground_truth, context=ctx))
     else:
-        rc_result = {"score": 0.0, "reason": "ground truth generation failed"}
+        rc_result = None
+
+    if not rc_result:
+        return None
 
     faithfulness      = float(f_result.get("score", 0.0))
     answer_relevancy  = float(r_result.get("score", 0.0))
@@ -240,12 +250,17 @@ def evaluate_tag(tag: str, limit: int) -> None:
         return
 
     results = []
-    for t in traces:
+    total = len(traces)
+    for idx, t in enumerate(traces, start=1):
+        print(f"  working [{idx}/{total}] ...", end="\r", flush=True)
         observations = _fetch_observations(t["id"])
         qa = _extract_qa(t, observations)
         if not qa:
             continue
-        results.append(_evaluate_trace(t["id"], qa, agent_tag=tag))
+        result = _evaluate_trace(t["id"], qa, agent_tag=tag)
+        if result:
+            results.append(result)
+    print(" " * 40, end="\r")  # clear the working line
 
     if not results:
         print("  (no RAG context found in traces  skipped)")
@@ -257,6 +272,7 @@ def evaluate_tag(tag: str, limit: int) -> None:
         flag = "ok" if avg >= 0.8 else ("warn" if avg >= 0.6 else "FAIL")
         print(f"  {label:<24} = {avg:.2f}  [{flag}]")
     print(f"  ({len(results)} traces evaluated, scores pushed to Langfuse)")
+    print(f"  done ✓")
 
 
 #  Main 
