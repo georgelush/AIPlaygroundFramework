@@ -12,15 +12,16 @@ AGENT_DESCRIPTION = "Health check agent — no LLM, no graph. Send any message t
 trace_log: list[dict] = []
 
 
-def run_agent(payload: str) -> str:
+def run_agent(payload) -> str:
     trace_log.clear()
+    message = payload.get("message", str(payload)) if isinstance(payload, dict) else str(payload)
     trace_log.append({
         "type": "node_exec",
         "label": "Ping",
         "from": "user",
         "to": "ping",
         "arrow": "->",
-        "content": payload[:200],
+        "content": message[:200],
         "fn": "run_agent",
     })
     trace_log.append({
