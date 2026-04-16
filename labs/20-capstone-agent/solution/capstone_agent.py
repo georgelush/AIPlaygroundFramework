@@ -10,6 +10,15 @@ Demonstrates production-ready agent architecture — the correct separation of c
 Data: src/data/hr_handbook.txt — indexed into Qdrant in-memory on first call.
 Infrastructure: docker compose up -d redis
 Agent type: chat | multilingual | RAG | HITL vacation approval
+
+Admin commands (user: hr_admin only)
+-------------------------------------
+  reset requests       — delete all pending vacation requests from Redis (hr:pending:*)
+  reset budget all     — delete token budgets for all users (hr:budget:*)
+  reset budget <user>  — delete token budget for a specific user (e.g. reset budget bob)
+
+  To also clear LangGraph HITL checkpoints (full Redis wipe), run from terminal:
+    docker exec -it agentic-ai-playground-redis-1 redis-cli FLUSHALL
 """
 import re
 from datetime import datetime, timezone
@@ -19,6 +28,8 @@ import redis
 
 from src.config import REDIS_URL
 from src.graphs.hr_graph import graph
+from langfuse import propagate_attributes as _lf_propagate
+from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 from src.nodes.hr_nodes import (
     _node_trace as _hr_node_trace,
     _cost_tracker,
@@ -64,6 +75,9 @@ _redis = redis.from_url(REDIS_URL, decode_responses=True)
 # Pattern for cross-thread approval: 'approve:REQ-A1B2C3D4' or 'reject:REQ-A1B2C3D4'
 _APPROVE_PATTERN = re.compile(r"^(approve|reject):(REQ-[A-F0-9]{8})$", re.IGNORECASE)
 
+# Pattern for status check: 'status:REQ-A1B2C3D4'
+_STATUS_PATTERN = re.compile(r"^status:(REQ-[A-F0-9]{8})$", re.IGNORECASE)
+
 # Pattern for admin budget reset: 'reset budget bob' or 'reset budget all'
 _RESET_PATTERN = re.compile(r"^reset\s+budget\s+(\S+)$", re.IGNORECASE)
 
@@ -88,8 +102,8 @@ def _record_tokens(user_id: str, tokens: int) -> None:
 
 
 def get_role(user_id: str) -> str:
-    """Returns the role for a user_id. Defaults to 'employee' if unknown."""
-    return _user_roles.get(user_id.lower(), "employee")
+    """Returns the role for a user_id. Defaults to 'guest' if unknown."""
+    return _user_roles.get(user_id.lower(), "guest")
 
 
 def has_permission(role: str, action: str) -> bool:
@@ -169,7 +183,8 @@ def run_agent(payload) -> str:
         for perm in permissions
         for tool_name in ACTION_TO_TOOLS.get(perm, [])
     ]
-    config = {"configurable": {"thread_id": thread_id, "allowed_tool_names": allowed_tool_names}}
+    agent_name = AGENT_NAME.lower().replace(" ", "-")
+    config = {"configurable": {"thread_id": thread_id, "allowed_tool_names": allowed_tool_names, "agent_name": agent_name}}
 
     # ── Security validation at system boundary (Lab 14 pattern) ─────────────────────────
     validation_error = validate_input(user_input)
@@ -209,7 +224,7 @@ def run_agent(payload) -> str:
         "type": "node_exec",
         "label": f"Auth OK [{role}]",
         "from": "auth",
-        "to": "graph",
+        "to": "agent",
         "arrow": "->",
         "content": f"user={user_id} | role={role} | action={action} | allowed",
     })
@@ -333,6 +348,38 @@ def run_agent(payload) -> str:
         })
         return response
 
+    # ── Status check: employee types 'status:REQ-XXXXXXXX' ───────────────────────────────
+    sm = _STATUS_PATTERN.match(user_input.strip())
+    if sm:
+        request_id = sm.group(1).upper()
+        req_data = resolve_pending_request(request_id)
+        if not req_data:
+            return f"Request `{request_id}` not found (may have expired or never existed)."
+        # Only the employee who submitted, or a manager/admin, can check status
+        employee_id = req_data.get("employee_id")
+        if role not in ("manager", "admin") and employee_id and employee_id.lower() != user_id.lower():
+            record_audit(user_id, role, "ask_hr", "denied:status-other-user")
+            return f"Access denied. You can only check the status of your own requests."
+        status = req_data.get("status", "unknown")
+        status_icon = {"pending": "⏳ PENDING MANAGER / HR APPROVAL", "approved": "✅ APPROVED", "rejected": "❌ REJECTED"}.get(status, status.upper())
+        details = req_data.get("details", "")
+        trace_log.append({
+            "type": "node_exec",
+            "label": f"Status [{request_id}]",
+            "from": "agent",
+            "to": "user",
+            "arrow": "->",
+            "content": f"request_id={request_id} | status={status} | user={user_id}",
+        })
+        base_response = f"**Request ID:** `{request_id}`\n**Status:** {status_icon}\n\n{details}"
+        if role in ("manager", "admin") and status == "pending":
+            base_response += (
+                f"\n\n---\nTo process this request:\n\n"
+                f"```\napprove:{request_id}\n```\n\n"
+                f"```\nreject:{request_id}\n```"
+            )
+        return base_response
+
     # ── Token budget check (Lab 13 + 15 pattern) — Redis TTL window ─────────────────────────────────────
     tokens_used = _get_tokens_used(user_id)
     if tokens_used >= USER_TOKEN_BUDGET:
@@ -359,9 +406,20 @@ def run_agent(payload) -> str:
     # Check if graph is paused at an interrupt on the current thread
     state = graph.get_state(config)
     if state.next:
+        # Guard: only valid approve/reject commands may resume a paused graph.
+        # Any other message (e.g. a new vacation request) would be silently used
+        # as the HITL decision — intercepted here to prevent accidental rejection.
+        if not re.match(r"^(approve|reject)\b", user_input.strip().lower()):
+            return (
+                "There is a vacation request pending manager approval. "
+                "Please wait for the manager decision before sending a new message.\n\n"
+                "A manager must type `approve:<REQUEST_ID>` or `reject:<REQUEST_ID>` to resolve it."
+            )
         result = graph.invoke(Command(resume=user_input.strip()), config=config)
     else:
-        result = graph.invoke({"messages": [HumanMessage(content=user_input)]}, config=config)
+        _lf_handler = LangfuseCallbackHandler()
+        with _lf_propagate(tags=["rag", agent_name], session_id=thread_id):
+            result = graph.invoke({"messages": [HumanMessage(content=user_input)]}, config=config)
 
     # Check if graph paused again after this invoke (new interrupt)
     state_after = graph.get_state(config)
@@ -375,13 +433,22 @@ def run_agent(payload) -> str:
         if req_id:
             # Tag the Redis record with the employee who submitted — used for self-approval check
             tag_pending_request_employee(req_id, user_id)
-            response = (
-                f"Vacation request submitted — pending manager approval.\n\n"
-                f"**Request ID:** `{req_id}`\n\n"
-                f"Manager — copy one of these into the chat to process:\n\n"
-                f"```\napprove:{req_id}\n```\n\n"
-                f"```\nreject:{req_id}\n```"
-            )
+            # Employees see a clean confirmation — approve/reject instructions only for managers/admins
+            if role in ("manager", "admin"):
+                response = (
+                    f"Vacation request submitted — pending your approval.\n\n"
+                    f"**Request ID:** `{req_id}`\n\n"
+                    f"To process it, type one of:\n\n"
+                    f"```\napprove:{req_id}\n```\n\n"
+                    f"```\nreject:{req_id}\n```"
+                )
+            else:
+                response = (
+                    f"Your vacation request has been submitted and is pending HR approval.\n\n"
+                    f"**Request ID:** `{req_id}`\n\n"
+                    f"You will be notified once a manager reviews it. "
+                    f"To check the status, type: `status:{req_id}`"
+                )
         else:
             # Last resort: try LangGraph tasks API
             try:
@@ -393,6 +460,18 @@ def run_agent(payload) -> str:
 
     # Output sanitization (Lab 14 pattern) — strips accidental system prompt leakage
     response = sanitize_output(response)
+
+    # ── Merge graph internals first (classify → tool → synthesize) ───────────────
+    trace_log.extend(_hr_node_trace)
+
+    trace_log.append({
+        "type": "graph_result",
+        "label": "HR Graph",
+        "from": "graph",
+        "to": "agent",
+        "arrow": "<-",
+        "content": response[:200],
+    })
 
     # ── Record actual token usage against user budget ─────────────────────────────
     cost_summary = _cost_tracker.get_cost_summary()
@@ -409,9 +488,6 @@ def run_agent(payload) -> str:
             "content": f"used={tokens_now} | budget={USER_TOKEN_BUDGET} | this_run={tokens_this_run} | window=24h TTL",
         })
 
-    # Merge tool_call / tool_result / node_exec / llm_response (with cost) entries from inside the graph
-    trace_log.extend(_hr_node_trace)
-
     # Append cost summary from this run
     trace_log.append({
         "type": "node_exec",
@@ -424,15 +500,6 @@ def run_agent(payload) -> str:
             f"total_output_tokens={cost_summary['total_output_tokens']} | "
             f"total_cost_usd=${cost_summary['total_cost_usd']}"
         ),
-    })
-
-    trace_log.append({
-        "type": "graph_result",
-        "label": "HR Graph",
-        "from": "graph",
-        "to": "agent",
-        "arrow": "<-",
-        "content": response[:200],
     })
 
     trace_log.append({

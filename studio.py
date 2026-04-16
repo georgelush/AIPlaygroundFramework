@@ -5,8 +5,8 @@ Visualize agents, execution trace, and test conversations in the browser.
 """
 import gradio as gr
 import inspect
+import uuid
 from src.registry import AGENTS, TRACES, META, reload_registry
-from src.config import LLM_MODEL
 
 
 # ── CSS ─────────────────────────────────────────────────────────────────────────
@@ -64,11 +64,24 @@ footer { display: none !important; }
     border-bottom: 1px solid #0d1028;
     box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.03) inset;
     border-radius: 12px;
-    padding: 8px 24px;
+    padding: 8px 14px;
     margin-bottom: 10px;
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 10px;
+}
+.app-header > .wrap,
+.app-header > div {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    gap: 8px !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
 }
 .app-header-badge {
     display: inline-flex;
@@ -95,35 +108,22 @@ footer { display: none !important; }
     background-clip: text;
 }
 
-/* ── TOP BAR (label + select + reload button row) ── */
-#top-bar-row,
-#top-bar-row > div,
-#top-bar-row > .wrap {
-    background: linear-gradient(180deg, #0d1020 0%, #080c18 100%) !important;
-    border: 1px solid #1a2040 !important;
-    border-bottom: 1px solid #0d1028 !important;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.03) inset !important;
-    border-radius: 12px !important;
-    margin-bottom: 10px !important;
-    padding: 10px 16px !important;
-    align-items: center !important;
-    gap: 0 !important;
-}
-#top-bar-html,
-#top-bar-html > div,
-#top-bar-html .block,
-#top-bar-html .form {
+#header-title-html,
+#header-title-html > div,
+#header-title-html .block,
+#header-title-html .form {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important;
-    flex: 1 !important;
+    margin: 0 !important;
 }
-/* Reload button — bright cyan/teal */
-#reload-btn-id,
-#reload-btn-id > div,
-#reload-btn-id .block,
-#reload-btn-id .form {
+
+/* ── HEADER CONTROLS (all 3 boxes in one HTML element) ── */
+#header-controls-block,
+#header-controls-block > div,
+#header-controls-block .block,
+#header-controls-block .form {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
@@ -131,93 +131,165 @@ footer { display: none !important; }
     margin: 0 !important;
     flex-shrink: 0 !important;
 }
-#reload-btn-id button {
-    background: linear-gradient(180deg, #5a4fd0 0%, #4035b0 100%) !important;
-    border: 1px solid #6a5ee0 !important;
-    border-bottom: 1px solid #2a2090 !important;
-    border-radius: 8px !important;
-    color: #e8e4ff !important;
-    font-weight: 600 !important;
-    font-size: 0.8rem !important;
-    letter-spacing: 0.04em !important;
-    height: 38px !important;
-    padding: 0 22px !important;
-    cursor: pointer !important;
-    box-shadow: 0 4px 14px rgba(60,40,180,0.35), 0 1px 0 rgba(180,160,255,0.12) inset !important;
-    white-space: nowrap !important;
-    transition: all 0.15s ease !important;
+.session-box {
+    display: inline-flex;
+    align-items: stretch;
+    background: linear-gradient(180deg, #0b0f20 0%, #090d1b 100%);
+    border: 1px solid #1f2850;
+    border-top: 1px solid #2a3360;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+    white-space: nowrap;
 }
-#reload-btn-id button:hover {
-    background: linear-gradient(180deg, #6a5fe0 0%, #5045c0 100%) !important;
-    box-shadow: 0 6px 20px rgba(80,60,200,0.45), 0 1px 0 rgba(200,180,255,0.18) inset !important;
-    transform: translateY(-1px) !important;
+.session-box-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 5px 10px;
+    cursor: pointer;
+    user-select: none;
+    min-width: 120px;
 }
-#reload-btn-id button:active {
-    transform: translateY(1px) !important;
-    box-shadow: 0 2px 6px rgba(60,40,160,0.3) !important;
+.session-box-info:hover .sessions-uuid { color: #a0bcec; }
+.sessions-tag {
+    color: #ffffff;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-family: 'Courier New', monospace;
+    line-height: 1;
 }
-/* Agent Dropdown — no box, no border anywhere */
-.agent-dropdown,
-.agent-dropdown *,
-.agent-dropdown > .wrap,
-.agent-dropdown > div,
-.agent-dropdown .block,
-.agent-dropdown .form,
-#agent-dropdown,
-#agent-dropdown *,
-#agent-dropdown > .wrap,
-#agent-dropdown > div,
-#agent-dropdown .block,
-#agent-dropdown .form {
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    outline: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
+.sessions-uuid-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #7a94c8;
+    font-family: 'Courier New', monospace;
+    font-size: 0.67rem;
+    white-space: nowrap;
+    line-height: 1.3;
+    width: 130px;
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    caret-color: #7c6fe0;
+    transition: color 0.15s ease;
+    cursor: text;
 }
-/* Re-apply style only to the actual input/select inside */
-.agent-dropdown input,
-#agent-dropdown input {
-    background: linear-gradient(180deg, #0d1020 0%, #090c18 100%) !important;
-    border: 1px solid #1e2545 !important;
-    border-top: 1px solid #252d55 !important;
-    border-radius: 8px !important;
-    color: #c8d4f0 !important;
-    font-size: 0.9rem !important;
-    font-family: 'Inter', 'Segoe UI', sans-serif !important;
-    height: 38px !important;
-    min-height: 38px !important;
-    padding: 0 12px !important;
-    cursor: pointer !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.4) !important;
-    outline: none !important;
+.sessions-uuid-input:focus { color: #a0bcec; outline: none; }
+.session-new-btn {
+    border: none;
+    border-left: 1px solid #1f2850;
+    background: transparent;
+    color: #8090c0;
+    font-size: 1rem;
+    font-weight: 400;
+    padding: 0 12px;
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
-#agent-dropdown input::placeholder { color: #4a5880 !important; }
-#agent-dropdown svg { color: #4a5880 !important; fill: #4a5880 !important; }
-#agent-dropdown ul,
-#agent-dropdown [role="listbox"] {
-    background: #0d1020 !important;
-    border: 1px solid #1e2545 !important;
-    border-radius: 8px !important;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.6) !important;
-    padding: 4px !important;
+.session-new-btn:hover { color: #c0d0f0; background: rgba(255,255,255,0.04); }
+.session-row-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    line-height: 1;
 }
-#agent-dropdown li,
-#agent-dropdown [role="option"] {
-    color: #c8d4f0 !important;
-    background: transparent !important;
-    padding: 8px 12px !important;
-    font-size: 0.9rem !important;
-    cursor: pointer !important;
-    border-radius: 6px !important;
+.session-row-bottom {
+    display: flex;
+    align-items: center;
+    gap: 3px;
 }
-#agent-dropdown li:hover,
-#agent-dropdown [role="option"]:hover,
-#agent-dropdown [aria-selected="true"] {
-    background: rgba(124,111,224,0.15) !important;
-    color: #e2e8f0 !important;
+.session-apply-btn {
+    border: none;
+    background: transparent;
+    color: #505878;
+    font-size: 0.75rem;
+    padding: 0 2px;
+    cursor: pointer;
+    transition: color 0.15s ease;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
 }
+.session-apply-btn:hover { color: #80e0a0; }
+.session-copy-btn {
+    border: none;
+    background: transparent;
+    color: #505878;
+    padding: 0 2px;
+    cursor: pointer;
+    transition: color 0.15s ease;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+}
+.session-copy-btn:hover { color: #a0bcec; }
+/* ── User input inside user-box ── */
+.user-box-native-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #7a94c8;
+    font-family: 'Courier New', monospace;
+    font-size: 0.67rem;
+    white-space: nowrap;
+    line-height: 1.3;
+    width: 90px;
+    caret-color: #7c6fe0;
+    transition: color 0.15s ease;
+}
+.user-box-native-input:focus { color: #a0bcec; }
+.session-box-info:hover .user-box-native-input { color: #a0bcec; }
+/* native select inside agent-box */
+.agent-native-select {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #7a94c8;
+    font-family: 'Courier New', monospace;
+    font-size: 0.67rem;
+    cursor: pointer;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    padding: 0 18px 0 0;
+    max-width: 170px;
+    min-width: 80px;
+    line-height: 1.3;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236070a0'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 2px center;
+}
+.agent-native-select:hover { color: #a0bcec; }
+.agent-native-select option {
+    background: #0d1020;
+    color: #c8d4f0;
+    font-size: 0.82rem;
+}
+/* Hidden companions — off-screen but rendered in DOM so JS can find them */
+#hidden-companions {
+    position: fixed !important;
+    left: -9999px !important;
+    top: -9999px !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    opacity: 0 !important;
+}
+/* Right-align controls — title grows to fill space, controls stay compact on the right */
+#header-title-html { flex: 1 !important; }
 
 /* ── MAIN ROW (outer 3D box) ────────────────────────────── */
 .main-row,
@@ -476,16 +548,16 @@ footer { display: none !important; }
     font-family: 'Inter', 'Segoe UI', sans-serif !important;
     letter-spacing: 0.04em !important;
     box-shadow: 0 4px 14px rgba(60,40,180,0.35), 0 1px 0 rgba(180,160,255,0.12) inset !important;
-    height: 36px !important;
-    min-height: 36px !important;
-    max-height: 36px !important;
-    width: 80px !important;
-    min-width: 80px !important;
-    max-width: 80px !important;
-    font-size: 0.8rem !important;
+    height: 33px !important;
+    min-height: 33px !important;
+    max-height: 33px !important;
+    width: 68px !important;
+    min-width: 68px !important;
+    max-width: 68px !important;
+    font-size: 0.74rem !important;
     cursor: pointer !important;
     transition: all 0.15s ease !important;
-    padding: 0 12px !important;
+    padding: 0 8px !important;
 }
 .send-btn button:hover {
     background: linear-gradient(180deg, #6a5fe0 0%, #5045c0 100%) !important;
@@ -639,7 +711,6 @@ def build_trace_step(i: int, entry: dict) -> str:
 
 def build_agent_card(agent_name: str) -> str:
     agent_type = META.get(agent_name, {}).get("type", "chat")
-    model = META.get(agent_name, {}).get("model", LLM_MODEL)
     return f"""
     <div style='background:linear-gradient(145deg,#1a1640,#151230,#100e24);
                 border:1px solid #302860; border-top:1px solid #3c3478;
@@ -679,13 +750,41 @@ def build_trace_html(agent_name: str) -> str:
 
 # ── Chat logic ─────────────────────────────────────────────────────────────────
 
-def chat(user_message: str, history: list, agent_name: str):
+def _normalize_user_id(raw_user_id: str) -> str:
+    user_id = (raw_user_id or "").strip()
+    return user_id if user_id else "anonymous"
+
+
+def _new_session_id() -> str:
+    return str(uuid.uuid4())
+
+
+def chat(user_message: str, history: list, agent_name: str, user_id: str, session_id: str):
     if not user_message.strip():
         yield "", history, build_trace_html(agent_name)
         return
 
+    print(f"[chat] thread_id={session_id!r}  user_id={_normalize_user_id(user_id)!r}")
+
     run_fn = AGENTS[agent_name]
-    result = run_fn(user_message)
+    payload = {
+        "message": user_message,
+        "thread_id": session_id,
+        "user_id": _normalize_user_id(user_id),
+    }
+    try:
+        result = run_fn(payload)
+    except Exception as exc:
+        import traceback
+        print(f"[chat] EXCEPTION in run_agent: {exc}")
+        traceback.print_exc()
+        err_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": f"⚠ Agent error: {exc}"},
+        ]
+        yield "", err_history, build_trace_html(agent_name)
+        return
+    print(f"[chat] result type={type(result).__name__!r}  value={str(result)[:120]!r}")
 
     if inspect.isgenerator(result):
         partial = ""
@@ -711,6 +810,108 @@ def chat(user_message: str, history: list, agent_name: str):
         yield "", new_history, build_trace_html(agent_name)
 
 
+def _session_label_html(session_id: str) -> str:
+    js_apply = (
+        "(function(){"
+        "var src=document.querySelector('#session-uuid-input');"
+        "var t=document.querySelector('#session-id-input textarea,#session-id-input input');"
+        "console.log('[Apply] src=',src?src.value:'NOT FOUND','| target=',t?t.tagName+' found':'NOT FOUND');"
+        "if(src&&t){t.value=src.value;"
+        "t.dispatchEvent(new Event('input',{bubbles:true}));"
+        "t.dispatchEvent(new Event('change',{bubbles:true}));"
+        "console.log('[Apply] dispatched. t.value now=',t.value);"
+        "src.style.color='#50e090';"
+        "setTimeout(function(){src.style.color='';},600);}"
+        "else{console.warn('[Apply] FAILED - src or target not found');}"
+        "})();"
+    )
+    js_copy = (
+        "(function(){"
+        "var src=document.querySelector('#session-uuid-input');"
+        "if(src&&navigator.clipboard){"
+        "navigator.clipboard.writeText(src.value);"
+        "src.style.color='#50e090';"
+        "setTimeout(function(){src.style.color='';},600);}"
+        "})();"
+    )
+    copy_icon = (
+        "<svg width='11' height='11' viewBox='0 0 14 14' fill='none' xmlns='http://www.w3.org/2000/svg'>"
+        "<rect x='4' y='4' width='8' height='8' rx='1.5' stroke='currentColor' stroke-width='1.5'/>"
+        "<path d='M2 10V2h8' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/>"
+        "</svg>"
+    )
+    return (
+        f"<div class='session-box'>"
+        f"<div class='session-box-info' style='cursor:default;'>"
+        f"<div class='session-row-top'>"
+        f"<span class='sessions-tag'>Session ID</span>"
+        f"<button class='session-apply-btn' onclick=\"{js_apply}\" title='Apply session ID'>↵</button>"
+        f"</div>"
+        f"<div class='session-row-bottom'>"
+        f"<input id='session-uuid-input' class='sessions-uuid-input' value='{session_id}' title='{session_id}'>"
+        f"<button class='session-copy-btn' onclick=\"{js_copy}\" title='Copy session ID'>{copy_icon}</button>"
+        f"</div>"
+        f"</div>"
+        f"<button class='session-new-btn' "
+        f"onclick=\"(function(){{var t=document.querySelector('#session-reload-trigger textarea,#session-reload-trigger input');if(t){{t.value=''+Date.now();t.dispatchEvent(new Event('input',{{bubbles:true}}));t.dispatchEvent(new Event('change',{{bubbles:true}}));}}}})()\" "
+        f"title='New session'>⟳</button>"
+        f"</div>"
+    )
+
+
+def _agent_box_html(agent_names: list, current: str) -> str:
+    opts = "".join(
+        f"<option value='{n}' {'selected' if n == current else ''}>{n}</option>"
+        for n in agent_names
+    )
+    return (
+        "<div class='session-box'>"
+        "<div class='session-box-info' style='cursor:default;'>"
+        "<span class='sessions-tag'>Agents</span>"
+        f"<select class='agent-native-select' "
+        "onchange=\"(function(v){"
+        "var t=document.querySelector('#agent-name-state textarea,#agent-name-state input');"
+        "if(t){t.value=v;t.dispatchEvent(new Event('input',{bubbles:true}));}"
+        "})(this.value);\">"
+        f"{opts}"
+        "</select>"
+        "</div>"
+        "<button class='session-new-btn' "
+        "onclick=\"(function(){var t=document.querySelector('#agent-reload-trigger textarea,#agent-reload-trigger input');if(t){t.value=''+Date.now();t.dispatchEvent(new Event('input',{bubbles:true}));t.dispatchEvent(new Event('change',{bubbles:true}));}})()\" "
+        "title='Reload agents'>⟳</button>"
+        "</div>"
+    )
+
+
+def _user_box_html() -> str:
+    return (
+        "<div class='session-box'>"
+        "<div class='session-box-info' style='cursor:default;'>"
+        "<span class='sessions-tag'>User</span>"
+        "<input id='user-box-input' class='user-box-native-input' placeholder='anonymous' value='anonymous' "
+        "oninput=\"(function(v){var t=document.querySelector('#user-id-input textarea,#user-id-input input');"
+        "if(t){t.value=v;t.dispatchEvent(new Event('input',{bubbles:true}));}})(this.value);\">"
+        "</div>"
+        "</div>"
+    )
+
+
+def _header_controls_html(agent_names: list, current: str, session_id: str) -> str:
+    """Single HTML wrapper containing all 3 boxes — no Gradio flex spacing between them."""
+    return (
+        "<div style='display:flex;align-items:center;gap:8px;'>"
+        + _agent_box_html(agent_names, current)
+        + _user_box_html()
+        + _session_label_html(session_id)
+        + "</div>"
+    )
+
+
+def start_new_session(agent_name: str):
+    session_id = _new_session_id()
+    return session_id, _header_controls_html(list(AGENTS.keys()), agent_name, session_id), [], "", build_trace_html(agent_name), session_id
+
+
 # ── UI Layout ──────────────────────────────────────────────────────────────────
 
 def build_agent_bar():
@@ -734,25 +935,51 @@ def build_agent_bar():
 
 with gr.Blocks(title="Agent Studio") as demo:
 
-    gr.HTML("""
-    <div class='app-header'>
-        <h2>Agentic AI Playground</h2>
-    </div>
-    """)
+    session_id_state = gr.State(_new_session_id())
 
-    # Top bar: ACTIVE AGENT label + Gradio Dropdown (native) + Reload button
-    with gr.Row(elem_id="top-bar-row"):
-        agent_bar_html = gr.HTML(value=build_agent_bar(), elem_id="top-bar-html", scale=0)
+    # ── Hidden companion components (state + triggers) — off-screen via CSS, but in DOM ──
+    with gr.Column(elem_id="hidden-companions"):
         agent_selector = gr.Dropdown(
             choices=list(AGENTS.keys()),
             value=list(AGENTS.keys())[0] if AGENTS else None,
-            label="",
-            show_label=False,
-            elem_id="agent-dropdown",
-            elem_classes=["agent-dropdown"],
-            scale=6,
+            label="", show_label=False,
+            elem_id="agent-dropdown", elem_classes=["agent-dropdown"],
         )
-        reload_btn = gr.Button("⟳ Reload", elem_id="reload-btn-id", scale=0, min_width=120, variant="primary", elem_classes=["reload-btn"])
+        agent_name_state = gr.Textbox(
+            value=list(AGENTS.keys())[0] if AGENTS else "",
+            label="", show_label=False,
+            elem_id="agent-name-state",
+        )
+        agent_reload_trigger = gr.Textbox(
+            value="", label="", show_label=False,
+            elem_id="agent-reload-trigger",
+        )
+        user_id_input = gr.Textbox(
+            value="anonymous", label="", show_label=False,
+            placeholder="anonymous", elem_id="user-id-input",
+        )
+        session_reload_trigger = gr.Textbox(
+            value="", label="", show_label=False,
+            elem_id="session-reload-trigger",
+        )
+        session_id_input = gr.Textbox(
+            value=session_id_state.value, label="", show_label=False,
+            elem_id="session-id-input",
+        )
+
+    with gr.Row(elem_classes=["app-header"]):
+        gr.HTML("<h2>Agentic AI Playground</h2>", elem_id="header-title-html", scale=1)
+
+        # ── All 3 controls in one HTML element — no Gradio flex gaps between boxes ──
+        header_controls_html = gr.HTML(
+            value=_header_controls_html(
+                list(AGENTS.keys()),
+                list(AGENTS.keys())[0] if AGENTS else "",
+                session_id_state.value,
+            ),
+            elem_id="header-controls-block",
+            scale=0,
+        )
 
     with gr.Row(elem_classes=["main-row"]):
 
@@ -782,28 +1009,34 @@ with gr.Blocks(title="Agent Studio") as demo:
         print("\n[Reload] ── Scanning src/agents/ ──────────────────────")
         reload_registry()
         choices = list(AGENTS.keys())
-        value = choices[0] if choices else None
+        value = choices[0] if choices else ""
         print(f"[Reload] Found {len(choices)} agent(s): {', '.join(choices) if choices else 'none'}")
         print("[Reload] ── Done ─────────────────────────────\n")
-        return gr.Dropdown(choices=choices, value=value)
+        return gr.Dropdown(choices=choices, value=value), _header_controls_html(choices, value, session_id_state.value), value
 
-    reload_btn.click(
+    agent_reload_trigger.change(
         fn=reload_agents,
         inputs=[],
-        outputs=[agent_selector],
+        outputs=[agent_selector, header_controls_html, agent_name_state],
+    )
+
+    session_reload_trigger.change(
+        fn=start_new_session,
+        inputs=[agent_name_state],
+        outputs=[session_id_state, header_controls_html, chatbot, user_input, debug_panel, session_id_input],
     )
 
     send_btn.click(
         fn=chat,
-        inputs=[user_input, chatbot, agent_selector],
+        inputs=[user_input, chatbot, agent_name_state, user_id_input, session_id_input],
         outputs=[user_input, chatbot, debug_panel],
     )
     user_input.submit(
         fn=chat,
-        inputs=[user_input, chatbot, agent_selector],
+        inputs=[user_input, chatbot, agent_name_state, user_id_input, session_id_input],
         outputs=[user_input, chatbot, debug_panel],
     )
 
 if __name__ == "__main__":
-    print(f"[Studio] Ready at http://127.0.0.1:8000")
+    print("[Studio] Ready at http://127.0.0.1:8000")
     demo.launch(server_port=8000, inbrowser=True, css=CSS, theme=gr.themes.Base())

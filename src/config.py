@@ -14,6 +14,9 @@ logging.basicConfig(
     format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+# Silence noisy third-party loggers
+logging.getLogger("redisvl").setLevel(logging.WARNING)
+logging.getLogger("langgraph.checkpoint.redis").setLevel(logging.WARNING)
 
 load_dotenv()
 

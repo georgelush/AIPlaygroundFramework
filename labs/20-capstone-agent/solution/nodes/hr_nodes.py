@@ -12,7 +12,8 @@ from langgraph.types import interrupt
 from langgraph.graph import MessagesState
 import redis as _redis_module
 
-from src.config import LLM_MODEL, LLM_PROXY, LLM_API_KEY, langfuse_handler, REDIS_URL
+from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
+from src.config import LLM_MODEL, LLM_PROXY, LLM_API_KEY, REDIS_URL
 from src.mixins.cost_tracking import CostTrackingMixin
 from src.mixins.logging_mixin import LoggingMixin
 from src.tools.hr_tools import TOOLS
@@ -224,10 +225,18 @@ def node_llm(state: MessagesState, config: RunnableConfig) -> dict:
     is_synthesis = bool(state["messages"]) and isinstance(state["messages"][-1], ToolMessage)
 
     if is_synthesis:
-        # Full context needed — LLM must synthesise tool results + follow HR policy rules
+        # Full context needed — LLM must synthesise tool results + follow HR policy rules.
+        # Exception: if the last tool call was calculate_leave_days, the result is a
+        # deterministic number — nano model is sufficient, no reasoning needed.
+        last_tool = state["messages"][-1]
+        tool_name = getattr(last_tool, "name", "") if isinstance(last_tool, ToolMessage) else ""
+        if tool_name == "calculate_leave_days":
+            active_llm   = llm_classify  # cheap model — deterministic result, no synthesis needed
+            active_model = LLM_CLASSIFY_MODEL
+        else:
+            active_llm   = llm_smart
+            active_model = LLM_SMART_MODEL
         messages = [SystemMessage(content=SYSTEM_PROMPT)] + state["messages"]
-        active_llm   = llm_smart
-        active_model = LLM_SMART_MODEL
     else:
         # Routing only — truncate to last user message to minimise input tokens.
         # The routing model does NOT need HR policy text — only tool descriptions.
@@ -237,8 +246,16 @@ def node_llm(state: MessagesState, config: RunnableConfig) -> dict:
         active_llm   = llm_classify_with_tools
         active_model = LLM_CLASSIFY_MODEL
 
+    agent_name = config.get("configurable", {}).get("agent_name", "unknown-agent")
+    # CallbackHandler without trace_context inherits the OTel context set by
+    # propagate_attributes in run_agent — both classify + synthesize calls become
+    # child observations under the same parent trace.
+    _lf_handler = LangfuseCallbackHandler()
     try:
-        response = active_llm.invoke(messages, config={"callbacks": [langfuse_handler]})
+        response = active_llm.invoke(
+            messages,
+            config={"callbacks": [_lf_handler]},
+        )
     except openai.BadRequestError as exc:
         detail = str(exc)
         if "content_filter" in detail or "ContentPolicyViolation" in detail:
