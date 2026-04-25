@@ -394,6 +394,19 @@ Available test users:
 
 ---
 
+## How to test in Studio
+
+1. Make sure Redis is running: `docker compose up -d redis`
+2. Run Studio: `python studio/studio.py`
+3. Open **http://127.0.0.1:8000** in your browser
+4. Select **HR Assistant** from the dropdown
+5. Set the **User** field (top of the UI) to a username — this controls role-based access:
+   - `bob` — employee (can ask HR questions, request vacation)
+   - `alice` — manager (can also approve/reject vacation requests)
+   - `hr_admin` — admin (full access including budget reset)
+6. Type your HR question in the **Message** field and press **Send**
+7. The **Trace** panel shows the full multi-agent HR pipeline
+
 ## Test Checklist
 
 | # | User (set in USER box) | Input | Expected output | Trace expected |

@@ -255,6 +255,20 @@ def run_agent(payload) -> str:
 
 ---
 
+## How to test in Studio
+
+1. Run Studio: `python studio/studio.py`
+2. Open **http://127.0.0.1:8000** in your browser
+3. Select **Base Agent** from the dropdown
+4. Plain text works and defaults to `user=anonymous, role=user`:
+   ```
+   Who are you?
+   ```
+5. To test role-based access, enter a **JSON object** in the Message field:
+   ```json
+   {"message": "Explain what AuthMixin does", "user_id": "alice", "role": "admin"}
+   ```
+
 ## Test Checklist — Base Agent
 
 | # | Input | Expected output | Trace expected |

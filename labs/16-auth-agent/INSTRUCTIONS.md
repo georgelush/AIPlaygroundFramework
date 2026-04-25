@@ -13,7 +13,7 @@
 | State field | `quota_error: str \| None` | `auth_error: str \| None` |
 | Storage | Token budget dict | Role map dict |
 | Extra logging | None | `audit_log` — persistent, never cleared |
-| Input parsing | `user_id` from payload | `@username message` format in Studio |
+| Input parsing | `user_id` from payload | `user_id` field in JSON payload |
 
 ## Key pattern — Gate Node before LLM (same as Labs 14 & 15)
 ```
@@ -27,14 +27,14 @@ All three Module 3 agents (14, 15, 16) use this identical graph structure.
 - **`_user_roles`** — in-memory identity store (replace with AD/OAuth2 in production)
 - **`audit_log`** — separate from `trace_log`, never cleared, records every request outcome
 - **`_detect_action`** — keyword-based intent detection before invoke
-- **`@user message` format** — Studio-compatible way to pass user identity
+- **JSON payload format** — same as Labs 07 and 15: `{"message": "...", "user_id": "alice"}`
 
 ## Studio test format
-```
-@alice Show all users    → user_id=alice (admin) → ask_admin → allowed
-@bob Show all users      → user_id=bob (user)    → ask_admin → denied
-@carol What is RBAC?     → user_id=carol (guest) → ask_general → allowed
-Show all users           → user_id=anonymous (guest) → ask_admin → denied
+```json
+{"message": "Show all users", "user_id": "alice"}   → role=admin → ask_admin → allowed
+{"message": "Show all users", "user_id": "bob"}     → role=user  → ask_admin → denied
+{"message": "What is RBAC?", "user_id": "carol"}   → role=guest → ask_general → allowed
+{"message": "Show all users"}                       → user_id=anonymous (guest) → denied
 ```
 
 ---
@@ -109,11 +109,12 @@ Identical pattern to Labs 14 and 15 — gate node + conditional edge.
 
 ### Block 9 — run_agent()
 ```python
-# Studio format: "@alice Show all users" → user_id=alice, message="Show all users"
-if user_input.startswith("@"):
-    parts = user_input.split(" ", 1)
-    user_id = parts[0][1:]  # strip @
-    user_input = parts[1] if len(parts) > 1 else ""
+# Accept JSON payload like Labs 07 and 15
+if isinstance(payload, str):
+    payload = json.loads(payload)  # parse JSON string from Studio
+
+user_id = payload.get("user_id", "anonymous")  # field from UI
+user_input = payload.get("message", "")
 ```
 `_detect_action()` maps keywords to action strings before invoke.
 
@@ -140,16 +141,30 @@ Select **Auth Agent** from the dropdown.
 
 ---
 
+## How to test in Studio
+
+1. Run Studio: `python studio/studio.py`
+2. Open **http://127.0.0.1:8000** in your browser
+3. Select **Auth Agent** from the dropdown
+4. Enter a **JSON object** in the Message field — `user_id` controls which role is applied:
+   ```json
+   {"message": "Show all users", "user_id": "alice"}
+   ```
+5. Available test users:
+   - `alice` — **admin** (full access)
+   - `bob` — **user** (limited access)
+   - `carol` — **guest** (read-only)
+
 ## Test Checklist — Auth Agent
 
 | # | Input | Expected output | Trace expected |
 |---|---|---|---|
-| 1 | `@alice Show all users` | LLM response (admin access granted) | `node_exec` (Auth Check, `user=alice \| role=admin \| action=ask_admin`) → `node_exec` (Auth OK) → `llm_response` (LLM) |
-| 2 | `@bob Show all users` | `"Access denied. Role 'user'..."` | `node_exec` (Auth Check, `user=bob \| role=user \| action=ask_admin`) → `node_exec` (Denied) — no `llm_response` |
-| 3 | `@carol What is RBAC?` | LLM response (general question allowed) | `node_exec` (Auth Check, `user=carol \| role=guest \| action=ask_general`) → `node_exec` (Auth OK) → `llm_response` (LLM) |
-| 4 | `@carol Show all users` | `"Access denied. Role 'guest'..."` | `node_exec` (Auth Check, `user=carol \| role=guest \| action=ask_admin`) → `node_exec` (Denied) — no `llm_response` |
-| 5 | `Show all users` (no `@` prefix) | `"Access denied. Role 'guest'..."` | `node_exec` (Auth Check, `user=anonymous \| role=guest`) → `node_exec` (Denied) — fallback to guest |
-| 6 | `@bob Show my profile` | LLM response (personal action allowed for user) | `node_exec` (Auth Check, `user=bob \| role=user \| action=ask_personal`) → `node_exec` (Auth OK) → `llm_response` (LLM) |
+| 1 | `{"message": "Show all users", "user_id": "alice"}` | LLM response (admin access granted) | `node_exec` (Auth Check, `user=alice \| role=admin \| action=ask_admin`) → `node_exec` (Auth OK) → `llm_response` (LLM) |
+| 2 | `{"message": "Show all users", "user_id": "bob"}` | `"Access denied. Role 'user'..."` | `node_exec` (Auth Check, `user=bob \| role=user \| action=ask_admin`) → `node_exec` (Denied) — no `llm_response` |
+| 3 | `{"message": "What is RBAC?", "user_id": "carol"}` | LLM response (general question allowed) | `node_exec` (Auth Check, `user=carol \| role=guest \| action=ask_general`) → `node_exec` (Auth OK) → `llm_response` (LLM) |
+| 4 | `{"message": "Show all users", "user_id": "carol"}` | `"Access denied. Role 'guest'..."` | `node_exec` (Auth Check, `user=carol \| role=guest \| action=ask_admin`) → `node_exec` (Denied) — no `llm_response` |
+| 5 | `{"message": "Show all users"}` (no `user_id`) | `"Access denied. Role 'guest'..."` | `node_exec` (Auth Check, `user=anonymous \| role=guest`) → `node_exec` (Denied) — fallback to guest |
+| 6 | `{"message": "Show my profile", "user_id": "bob"}` | LLM response (personal action allowed for user) | `node_exec` (Auth Check, `user=bob \| role=user \| action=ask_personal`) → `node_exec` (Auth OK) → `llm_response` (LLM) |
 
 **Why test #1 AND #2 with the same message:** Proves role isolation — same message produces different outcomes based on who sends it. The only variable is the `@` prefix.
 

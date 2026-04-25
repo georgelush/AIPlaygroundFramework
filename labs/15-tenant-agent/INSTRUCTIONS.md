@@ -182,6 +182,17 @@ Select **Multi-Tenant Agent** from the dropdown.
 
 ---
 
+## How to test in Studio
+
+1. Run Studio: `python studio/studio.py`
+2. Open **http://127.0.0.1:8000** in your browser
+3. Select **Multi-Tenant Agent** from the dropdown
+4. Enter a **JSON object** in the Message field — `user_id` and `session_id` define the tenant thread:
+   ```json
+   {"message": "What is multi-tenancy?", "user_id": "user_42", "session_id": "s1"}
+   ```
+5. Change `user_id` to simulate a different tenant — the conversations are fully isolated
+
 ## Test Checklist — Multi-Tenant Agent
 
 | # | Input | Expected output | Trace expected |

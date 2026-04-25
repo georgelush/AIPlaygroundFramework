@@ -248,6 +248,17 @@ def run_agent(payload: str) -> dict:
 
 ---
 
+## How to test in Studio
+
+1. Run Studio: `python studio/studio.py`
+2. Open **http://127.0.0.1:8000** in your browser
+3. Select **Structured Output Agent** from the dropdown
+4. Type a natural language description in the **Message** field, e.g.:
+   ```
+   Andrei Popescu, 34 years old, lives in Bucharest, works as a software engineer
+   ```
+5. The response is rendered as **formatted JSON** with syntax highlighting
+
 ## Test Checklist — Structured Output Agent
 
 ### Setup

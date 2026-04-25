@@ -114,6 +114,14 @@ def run_agent(payload: str) -> str:
 
 ---
 
+## How to test in Studio
+
+1. Run Studio: `python studio/studio.py`
+2. Open **http://127.0.0.1:8000** in your browser
+3. Select **Chat Agent** from the dropdown
+4. Type messages in the **Message** field — the agent remembers the full conversation within the same session
+5. Press **New Session** to reset conversation memory and start fresh
+
 ## Test Checklist
 
 | # | Input | Expected output | Trace expected |

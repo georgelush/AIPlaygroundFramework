@@ -206,7 +206,17 @@ docker compose up -d redis
 
 Open **http://localhost:8000** → select **Async Agent**
 
-### Test Checklist
+### How to test in Studio
+
+1. Make sure Redis is running: `docker compose up -d redis`
+2. Run Studio: `python studio/studio.py`
+3. Open **http://127.0.0.1:8000** in your browser
+4. Select **Async Agent** from the dropdown
+5. Send any message — the job starts immediately and the agent returns a **Job ID** in under 1 second
+6. Poll the result by sending: `job:<paste-the-job-id-here>`
+7. Or trigger a blocking webhook demo: `webhook:process quarterly report`
+
+## Test Checklist
 
 | # | Input | Expected output | Trace expected |
 |---|---|---|---|

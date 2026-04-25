@@ -193,6 +193,15 @@ def run_agent(payload) -> str:
 
 ---
 
+## How to test in Studio
+
+1. Run Studio: `python studio/studio.py`
+2. Open **http://127.0.0.1:8000** in your browser
+3. Select **HITL Agent** from the dropdown
+4. For normal messages (e.g. `"Hello, how do you work?"`): the agent responds directly
+5. For sensitive requests (e.g. `"delete all files"`): the graph **pauses** and shows `"Action pending approval"`
+6. **In the same session**, type `approve` or `reject` to resume — do NOT refresh or start a new session
+
 ## Test Checklist — HITL Agent
 
 | # | Input | Expected output | Trace expected |
