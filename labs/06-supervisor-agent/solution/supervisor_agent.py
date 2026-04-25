@@ -22,9 +22,7 @@ from langchain_openai import ChatOpenAI
 from typing import TypedDict
 
 from src.config import LLM_MODEL, LLM_PROXY, LLM_API_KEY, langfuse_handler, get_llm_temperature
-import src.agents.chat_agent as chat_agent
-import src.agents.tools_agent as tools_agent
-import src.agents.pipeline_agent as pipeline_agent
+# Sub-agent imports are lazy (inside node_delegate) to avoid load-order errors
 
 
 AGENT_NAME = "Supervisor Agent"
@@ -96,14 +94,16 @@ def node_supervise(state: State) -> dict:
     })
     return {"delegate": delegate}
 
-AGENT_MAP = {
-    "chat": chat_agent,
-    "tools": tools_agent,
-    "pipeline": pipeline_agent,
-}
-
 def node_delegate(state: State) -> dict:
-    target = AGENT_MAP[state["delegate"]]
+    import src.agents.chat_agent as chat_agent
+    import src.agents.tools_agent as tools_agent
+    import src.agents.pipeline_agent as pipeline_agent
+    agent_map = {
+        "chat": chat_agent,
+        "tools": tools_agent,
+        "pipeline": pipeline_agent,
+    }
+    target = agent_map[state["delegate"]]
     trace_log.append({
         "type": "graph_call",
         "label": "Agent Call",

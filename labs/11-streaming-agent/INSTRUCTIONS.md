@@ -266,6 +266,14 @@ def chat(user_message: str, history: list, agent_name: str):
 
 ---
 
+## How to test in Studio
+
+1. Run Studio: `python studio/studio.py`
+2. Open **http://127.0.0.1:8000** in your browser
+3. Select **Streaming Agent** from the dropdown
+4. Type your message in the **Message** field and press **Send**
+5. Watch the response appear **token by token** in the chat area — this is the streaming effect
+
 ## Test Checklist — Streaming Agent
 
 | # | Input | Expected output | Trace expected |

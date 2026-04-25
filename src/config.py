@@ -27,6 +27,10 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-5.4-nano")
 
 # Infrastructure
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
+POSTGRES_URL = os.environ.get(
+    "POSTGRES_URL",
+    "postgresql://myuser:mypassword@localhost:5432/ai_playground",
+)
 
 # Langfuse (observability / tracing)
 # langfuse.langchain.CallbackHandler reads these env vars automatically:

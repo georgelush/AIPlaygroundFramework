@@ -137,6 +137,15 @@ Entry point. Accepts `"run tests"` command only. Calls `_run_all_checks()`, form
 
 ---
 
+## How to test in Studio
+
+1. Run Studio: `python studio/studio.py`
+2. Open **http://127.0.0.1:8000** in your browser
+3. Select **Test Agent** from the dropdown
+4. Type `run tests` in the **Message** field and press **Send**
+5. The agent runs a live test suite across all loaded agents and returns a formatted report
+6. The report groups results by agent and marks each check as pass or fail
+
 ## Test Checklist — Test Agent
 
 | # | Input | Expected output | Trace expected |

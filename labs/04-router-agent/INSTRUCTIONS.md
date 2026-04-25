@@ -118,6 +118,14 @@ def build_graph():
 
 ---
 
+## How to test in Studio
+
+1. Run Studio: `python studio/studio.py`
+2. Open **http://127.0.0.1:8000** in your browser
+3. Select **Router Agent** from the dropdown
+4. Type your message in the **Message** field and press **Send**
+5. The **Trace** panel shows which branch the router selected (question / greeting / fallback)
+
 ## Test Checklist
 
 | # | Input | Expected output | Trace expected |

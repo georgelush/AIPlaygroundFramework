@@ -1,0 +1,58 @@
+LangGraph Concepts — RAG Demo Document
+
+WHAT IS LANGGRAPH?
+LangGraph is a library for building stateful, multi-agent applications using graphs.
+It extends LangChain by adding support for cycles, branching, and persistent state.
+Each agent in LangGraph is represented as a graph with nodes and edges.
+
+WHAT IS A NODE?
+A node is a plain Python function that receives the current state, performs one job,
+and returns only the fields it modified (partial state update).
+Nodes can call LLMs, execute tools, transform data, or perform validation.
+Example node names: node_retrieve, node_generate, node_classify, node_respond.
+
+WHAT IS AN EDGE?
+An edge is a connection between two nodes — it defines the execution order.
+A regular edge always moves from one node to the next.
+A conditional edge uses a routing function to decide which node to go to next.
+
+WHAT IS STATE?
+State is a TypedDict that carries all data as it moves through the graph.
+Every node reads from state and writes back only the fields it changed.
+State is immutable — nodes never mutate it directly, they return a new partial dict.
+
+WHAT IS A TOOL?
+A tool is a Python function decorated with @tool that the LLM can call dynamically.
+The LLM reads the docstring to decide when to use the tool.
+Tools are used inside a ReAct loop: LLM decides → tool runs → result goes back to LLM.
+
+WHAT IS RAG?
+RAG stands for Retrieval-Augmented Generation.
+Instead of relying on the LLM's training data, RAG retrieves relevant documents first,
+then passes them as context to the LLM so it can answer based on real, up-to-date information.
+RAG pipeline steps: load documents → split into chunks → embed → store in vector database →
+on query: embed query → search vector database → retrieve top-K chunks → pass to LLM with question.
+
+WHAT IS A VECTOR DATABASE?
+A vector database stores text as numerical vectors (embeddings).
+Similarity search finds the vectors closest to the query vector using cosine distance.
+Qdrant is a vector database that can run in-memory (for learning) or as a server (for production).
+
+WHAT IS AN EMBEDDING?
+An embedding is a numerical representation of text — an array of floating point numbers.
+Similar texts produce similar embeddings, enabling semantic search.
+The model BAAI/bge-small-en-v1.5 produces embeddings with 384 dimensions.
+OpenAI text-embedding-3-small produces embeddings with 1536 dimensions and supports multiple languages.
+
+AGENT CONTRACT
+Every agent in the AI Playground must define:
+- AGENT_NAME: display name shown in Studio UI and REST API
+- AGENT_TYPE: one of "chat", "processor", or "pipeline"
+- AGENT_DESCRIPTION: short description shown in GET /agents
+- trace_log: list that records every execution step for the Studio trace viewer
+- run_agent(payload): entry point function called by Studio and the REST server
+
+STUDIO AND SERVER
+studio.py runs a Gradio debug UI on port 8000 — used for visual testing.
+server.py runs a FastAPI REST server on port 8080 — used by n8n and other systems.
+Both auto-discover agents from src/agents/ — drop a new file and click Reload in Studio.

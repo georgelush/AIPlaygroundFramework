@@ -141,8 +141,8 @@ def node_llm(state: State) -> dict:
 
     user_message = state["messages"][0] if state["messages"] else ""
     messages = [
-        SystemMessage(content=SYSTEM_PROMPT),
-        HumanMessage(content=context_prefix + str(user_message)),
+        SystemMessage(content=SYSTEM_PROMPT + f"\n\nCURRENT REQUEST CONTEXT: {context_prefix.strip()}"),
+        HumanMessage(content=str(user_message)),
     ]
 
     response = llm.invoke(messages, config={"callbacks": [langfuse_handler]})
@@ -199,18 +199,19 @@ def _detect_action(message: str) -> str:
 def run_agent(payload) -> str:
     trace_log.clear()
 
+    if isinstance(payload, str):
+        import json
+        try:
+            payload = json.loads(payload)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
     if isinstance(payload, dict):
         user_input = payload.get("message", "")
         user_id = payload.get("user_id", "anonymous")
     else:
         user_input = str(payload)
         user_id = "anonymous"
-
-    # Studio format: "@alice Show all users" → user_id=alice, message="Show all users"
-    if user_input.startswith("@"):
-        parts = user_input.split(" ", 1)
-        user_id = parts[0][1:]  # strip @
-        user_input = parts[1] if len(parts) > 1 else ""
 
     role = get_role(user_id)
     action = _detect_action(user_input)

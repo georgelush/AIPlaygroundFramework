@@ -14,7 +14,6 @@ New concepts: REST introspection, server registry, VS Code port forwarding, n8n 
 
 import httpx
 from src.config import LLM_PROXY, LLM_API_KEY
-from src.registry import AGENTS, META
 
 AGENT_NAME = "Deploy Agent"
 AGENT_TYPE = "processor"
@@ -32,6 +31,7 @@ COMMANDS = """Available commands:
 
 def _cmd_status() -> str:
     """List all registered agents with type and description."""
+    from src.registry import AGENTS, META
     lines = [f"REGISTERED AGENTS — {len(AGENTS)} total\n"]
     for name, meta in META.items():
         lines.append("─" * 44)
@@ -43,6 +43,7 @@ def _cmd_status() -> str:
 
 def _cmd_health() -> str:
     """Check if the LLM proxy is reachable."""
+    from src.registry import AGENTS
     lines = ["HEALTH CHECK\n"]
 
     try:
@@ -66,6 +67,7 @@ def _cmd_health() -> str:
 
 def _cmd_info() -> str:
     """Return framework metadata — endpoints, agent count, server port."""
+    from src.registry import AGENTS, META
     agent_types: dict[str, int] = {}
     for meta in META.values():
         t = meta["type"]

@@ -1,0 +1,1 @@
+# Studio addon internal package

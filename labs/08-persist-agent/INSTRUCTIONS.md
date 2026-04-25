@@ -179,6 +179,15 @@ def run_agent(payload) -> str:
 
 ---
 
+## How to test in Studio
+
+1. Run Studio: `python studio/studio.py`
+2. Open **http://127.0.0.1:8000** in your browser
+3. Select **Persist Agent** from the dropdown
+4. Type your message in the **Message** field — the agent uses a persistent SQLite database
+5. The conversation is remembered across **Send** presses within the same session tab
+6. To test persistence: tell the agent your name, then ask "What is my name?" — it will remember
+
 ## Test Checklist — Persist Agent
 
 | # | Input | Expected output | Trace expected |

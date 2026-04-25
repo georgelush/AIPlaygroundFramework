@@ -102,6 +102,16 @@ Normalizes command to lowercase, routes to one of 3 functions, populates `trace_
 
 ---
 
+## How to test in Studio
+
+1. Run Studio: `python studio/studio.py`
+2. Open **http://127.0.0.1:8000** in your browser
+3. Select **Deploy Agent** from the dropdown
+4. Use one of three commands in the **Message** field:
+   - `status` — list all registered agents with type and description
+   - `health` — check LLM proxy + registry connectivity
+   - `info` — full framework info and n8n integration guide
+
 ## Test Checklist — Deploy Agent
 
 | # | Input | Expected output | Trace expected |

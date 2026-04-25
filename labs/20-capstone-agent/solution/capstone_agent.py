@@ -37,8 +37,11 @@ from src.nodes.hr_nodes import (
     detect_injection,
     sanitize_output,
     resolve_pending_request,
+    resolve_latest_request_for_employee,
+    resolve_request_by_thread,
     tag_pending_request_employee,
 )
+from src.tools.user_store import bootstrap_from_env, get_user_role, upsert_user_role, list_users
 
 AGENT_NAME = "HR Assistant"
 AGENT_TYPE = "chat"
@@ -52,14 +55,6 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
     "employee": ["ask_hr", "calculate_days", "submit_vacation"],
     "manager":  ["ask_hr", "calculate_days", "submit_vacation", "approve_vacation"],
     "admin":    ["ask_hr", "calculate_days", "submit_vacation", "approve_vacation", "ask_admin"],
-}
-
-# Identity store — replace with Active Directory / OAuth2 in production
-_user_roles: dict[str, str] = {
-    "alice":    "manager",
-    "bob":      "employee",
-    "carol":    "guest",
-    "hr_admin": "admin",
 }
 
 audit_log: list[dict] = []  # separate audit trail — never cleared between requests
@@ -77,9 +72,22 @@ _APPROVE_PATTERN = re.compile(r"^(approve|reject):(REQ-[A-F0-9]{8})$", re.IGNORE
 
 # Pattern for status check: 'status:REQ-A1B2C3D4'
 _STATUS_PATTERN = re.compile(r"^status:(REQ-[A-F0-9]{8})$", re.IGNORECASE)
+_STATUS_SHORT_PATTERN = re.compile(r"^status\??$", re.IGNORECASE)
 
 # Pattern for admin budget reset: 'reset budget bob' or 'reset budget all'
 _RESET_PATTERN = re.compile(r"^reset\s+budget\s+(\S+)$", re.IGNORECASE)
+# Pattern for admin user creation: 'create user bob role employee'
+_CREATE_USER_PATTERN = re.compile(
+    r"^create\s+user\s+(\S+)\s+role\s+(guest|employee|manager|admin)$",
+    re.IGNORECASE,
+)
+# Pattern for admin role update: 'set role bob manager' / 'add role bob manager'
+_SET_ROLE_PATTERN = re.compile(
+    r"^(?:set|add)\s+role\s+(\S+)\s+(guest|employee|manager|admin)$",
+    re.IGNORECASE,
+)
+# Pattern for admin user list: 'list users' or 'list users 50'
+_LIST_USERS_PATTERN = re.compile(r"^list\s+users(?:\s+(\d+))?$", re.IGNORECASE)
 
 
 def _budget_key(user_id: str) -> str:
@@ -102,8 +110,9 @@ def _record_tokens(user_id: str, tokens: int) -> None:
 
 
 def get_role(user_id: str) -> str:
-    """Returns the role for a user_id. Defaults to 'guest' if unknown."""
-    return _user_roles.get(user_id.lower(), "guest")
+    """Returns role from Postgres user store. Defaults to 'guest' if unknown."""
+    role = get_user_role(user_id)
+    return role if role else "guest"
 
 
 def has_permission(role: str, action: str) -> bool:
@@ -137,6 +146,14 @@ def _detect_action(message: str) -> str:
         return "submit_vacation"
     if re.search(r"\b(how many (working )?days|calculate|count days)\b", lower):
         return "calculate_days"
+    if (
+        lower == "reset requests"
+        or _RESET_PATTERN.match(lower)
+        or _CREATE_USER_PATTERN.match(lower)
+        or _SET_ROLE_PATTERN.match(lower)
+        or _LIST_USERS_PATTERN.match(lower)
+    ):
+        return "ask_admin"
     return "ask_hr"
 
 
@@ -151,9 +168,60 @@ def record_audit(user_id: str, role: str, action: str, outcome: str) -> None:
     })
 
 
+def _can_process_request_decision(
+    approver_id: str,
+    approver_role: str,
+    requester_id: str | None,
+) -> tuple[bool, str]:
+    """Returns whether approver_id is allowed to approve/reject requester_id's request.
+
+    Rules:
+    - Admin requester can self-approve/self-reject.
+    - Non-admin requester cannot self-approve/self-reject.
+    - If requester is manager, only admin can process the request.
+    """
+    if not requester_id:
+        return True, ""
+
+    requester_role = get_role(requester_id)
+
+    if requester_role == "manager" and approver_role != "admin":
+        return False, (
+            "Access denied. Requests created by managers can only be approved/rejected by an admin."
+        )
+
+    if requester_role != "admin" and requester_id.lower() == approver_id.lower():
+        return False, "Access denied. You cannot approve or reject your own vacation request."
+
+    return True, ""
+
+
+def _format_request_status_response(request_id: str, req_data: dict, role: str, user_id: str) -> str:
+    """Build standard request status response for both status:<ID> and short status commands."""
+    employee_id = req_data.get("employee_id")
+    if role not in ("manager", "admin") and employee_id and employee_id.lower() != user_id.lower():
+        return "Access denied. You can only check the status of your own requests."
+    status = req_data.get("status", "unknown")
+    status_icon = {
+        "pending": "⏳ PENDING MANAGER / HR APPROVAL",
+        "approved": "✅ APPROVED",
+        "rejected": "❌ REJECTED",
+    }.get(status, status.upper())
+    details = req_data.get("details", "")
+    base_response = f"**Request ID:** `{request_id}`\n**Status:** {status_icon}\n\n{details}"
+    if role in ("manager", "admin") and status == "pending":
+        base_response += (
+            f"\n\n---\nTo process this request:\n\n"
+            f"```\napprove:{request_id}\n```\n\n"
+            f"```\nreject:{request_id}\n```"
+        )
+    return base_response
+
+
 def run_agent(payload) -> str:
     trace_log.clear()
     _hr_node_trace.clear()
+    bootstrap_from_env()
     # Reset cost tracker at the start of every run
     _cost_tracker.__init__()
 
@@ -267,6 +335,86 @@ def run_agent(payload) -> str:
             })
             return f"Budget reset for '{target}'." if existed else f"No active budget found for '{target}' (may have already expired)."
 
+    # ── Admin: create user with role in Postgres ─────────────────────────────
+    # Format: 'create user <user_id> role <guest|employee|manager|admin>'
+    cm = _CREATE_USER_PATTERN.match(user_input.strip())
+    if cm:
+        if role != "admin":
+            record_audit(user_id, role, "ask_admin", "denied")
+            return "Access denied. Only admins can create users."
+        target_user = cm.group(1).lower()
+        target_role = cm.group(2).lower()
+        existing = get_user_role(target_user)
+        if existing:
+            return (
+                f"User '{target_user}' already exists with role '{existing}'. "
+                f"Use: set role {target_user} <guest|employee|manager|admin>"
+            )
+        upsert_user_role(target_user, target_role)
+        record_audit(user_id, role, "create_user", f"user={target_user}|role={target_role}")
+        trace_log.append({
+            "type": "node_exec",
+            "label": f"User Created [{target_user}]",
+            "from": "admin",
+            "to": "postgres",
+            "arrow": "->",
+            "content": f"admin={user_id} | user={target_user} | role={target_role}",
+        })
+        return f"User '{target_user}' created with role '{target_role}'."
+
+    # ── Admin: update role in Postgres ───────────────────────────────────────
+    # Format: 'set role <user_id> <guest|employee|manager|admin>'
+    #         'add role <user_id> <guest|employee|manager|admin>'
+    sm_role = _SET_ROLE_PATTERN.match(user_input.strip())
+    if sm_role:
+        if role != "admin":
+            record_audit(user_id, role, "ask_admin", "denied")
+            return "Access denied. Only admins can set roles."
+        target_user = sm_role.group(1).lower()
+        target_role = sm_role.group(2).lower()
+        previous = get_user_role(target_user)
+        upsert_user_role(target_user, target_role)
+        record_audit(
+            user_id,
+            role,
+            "set_role",
+            f"user={target_user}|from={previous or 'none'}|to={target_role}",
+        )
+        trace_log.append({
+            "type": "node_exec",
+            "label": f"Role Updated [{target_user}]",
+            "from": "admin",
+            "to": "postgres",
+            "arrow": "->",
+            "content": (
+                f"admin={user_id} | user={target_user} | from={previous or 'none'} | to={target_role}"
+            ),
+        })
+        return f"Role for '{target_user}' set to '{target_role}'."
+
+    # ── Admin: list users from Postgres ──────────────────────────────────────
+    # Format: 'list users' or 'list users 50'
+    lm = _LIST_USERS_PATTERN.match(user_input.strip())
+    if lm:
+        if role != "admin":
+            record_audit(user_id, role, "ask_admin", "denied")
+            return "Access denied. Only admins can list users."
+        limit = int(lm.group(1)) if lm.group(1) else 100
+        limit = max(1, min(limit, 500))
+        rows = list_users(limit=limit)
+        if not rows:
+            return "No users found in Postgres user store."
+        lines = [f"- {uid}: {r}" for uid, r in rows]
+        trace_log.append({
+            "type": "node_exec",
+            "label": "Users Listed",
+            "from": "admin",
+            "to": "postgres",
+            "arrow": "->",
+            "content": f"admin={user_id} | count={len(rows)} | limit={limit}",
+        })
+        return "Users:\n" + "\n".join(lines)
+
     # ── Admin: reset pending vacation requests ────────────────────────────────
     # Format: 'reset requests' — deletes all hr:pending:* keys from Redis
     if user_input.strip().lower() == "reset requests":
@@ -300,19 +448,19 @@ def run_agent(payload) -> str:
             return f"Request '{request_id}' not found or already processed."
         if req_data.get("status") != "pending":
             return f"Request '{request_id}' has already been {req_data.get('status', 'processed')}."
-        # Self-approval check — a user cannot approve their own vacation request
         employee_id = req_data.get("employee_id")
-        if employee_id and employee_id.lower() == user_id.lower():
-            record_audit(user_id, role, "approve_vacation", "denied:self-approval")
+        allowed, reason = _can_process_request_decision(user_id, role, employee_id)
+        if not allowed:
+            record_audit(user_id, role, "approve_vacation", "denied:approval-policy")
             trace_log.append({
                 "type": "node_exec",
-                "label": f"Self-Approval Denied [{user_id}]",
+                "label": f"Approval Denied [{user_id}]",
                 "from": "auth",
                 "to": "user",
                 "arrow": "->",
-                "content": f"user={user_id} tried to approve their own request {request_id}",
+                "content": f"user={user_id} cannot process request {request_id}",
             })
-            return f"Access denied. You cannot approve your own vacation request ({request_id})."
+            return f"{reason} ({request_id})"
         original_config = {"configurable": {"thread_id": req_data["thread_id"]}}
         paused_state = graph.get_state(original_config)
         if not paused_state.next:
@@ -355,30 +503,39 @@ def run_agent(payload) -> str:
         req_data = resolve_pending_request(request_id)
         if not req_data:
             return f"Request `{request_id}` not found (may have expired or never existed)."
-        # Only the employee who submitted, or a manager/admin, can check status
-        employee_id = req_data.get("employee_id")
-        if role not in ("manager", "admin") and employee_id and employee_id.lower() != user_id.lower():
+        response = _format_request_status_response(request_id, req_data, role, user_id)
+        if response.startswith("Access denied"):
             record_audit(user_id, role, "ask_hr", "denied:status-other-user")
-            return f"Access denied. You can only check the status of your own requests."
-        status = req_data.get("status", "unknown")
-        status_icon = {"pending": "⏳ PENDING MANAGER / HR APPROVAL", "approved": "✅ APPROVED", "rejected": "❌ REJECTED"}.get(status, status.upper())
-        details = req_data.get("details", "")
+            return response
         trace_log.append({
             "type": "node_exec",
             "label": f"Status [{request_id}]",
             "from": "agent",
             "to": "user",
             "arrow": "->",
-            "content": f"request_id={request_id} | status={status} | user={user_id}",
+            "content": f"request_id={request_id} | user={user_id}",
         })
-        base_response = f"**Request ID:** `{request_id}`\n**Status:** {status_icon}\n\n{details}"
-        if role in ("manager", "admin") and status == "pending":
-            base_response += (
-                f"\n\n---\nTo process this request:\n\n"
-                f"```\napprove:{request_id}\n```\n\n"
-                f"```\nreject:{request_id}\n```"
-            )
-        return base_response
+        return response
+
+    # ── Status check without ID: 'status' / 'status?' from any session ─────────────────
+    if _STATUS_SHORT_PATTERN.match(user_input.strip()):
+        latest = resolve_latest_request_for_employee(user_id)
+        if not latest:
+            return "No requests found for your user. Submit a vacation request first."
+        request_id, req_data = latest
+        response = _format_request_status_response(request_id, req_data, role, user_id)
+        if response.startswith("Access denied"):
+            record_audit(user_id, role, "ask_hr", "denied:status-other-user")
+            return response
+        trace_log.append({
+            "type": "node_exec",
+            "label": f"Status [{request_id}]",
+            "from": "agent",
+            "to": "user",
+            "arrow": "->",
+            "content": f"short_status | request_id={request_id} | user={user_id}",
+        })
+        return response
 
     # ── Token budget check (Lab 13 + 15 pattern) — Redis TTL window ─────────────────────────────────────
     tokens_used = _get_tokens_used(user_id)
@@ -404,25 +561,58 @@ def run_agent(payload) -> str:
     })
 
     # Check if graph is paused at an interrupt on the current thread
+    # If paused and this message is NOT an explicit decision command (approve/reject:REQ-...),
+    # continue the conversation on a side thread so the user can ask normal questions.
+    active_config = config
     state = graph.get_state(config)
     if state.next:
-        # Guard: only valid approve/reject commands may resume a paused graph.
-        # Any other message (e.g. a new vacation request) would be silently used
-        # as the HITL decision — intercepted here to prevent accidental rejection.
-        if not re.match(r"^(approve|reject)\b", user_input.strip().lower()):
-            return (
-                "There is a vacation request pending manager approval. "
-                "Please wait for the manager decision before sending a new message.\n\n"
-                "A manager must type `approve:<REQUEST_ID>` or `reject:<REQUEST_ID>` to resolve it."
-            )
-        result = graph.invoke(Command(resume=user_input.strip()), config=config)
+        memory_query = re.search(
+            r"what\s+(?:did\s+)?i\s+just\s+ask|what\s+(?:did\s+)?i\s+ask|ce\s+am\s+intrebat",
+            user_input.strip().lower(),
+        )
+        if memory_query:
+            pending = resolve_request_by_thread(thread_id, employee_id=user_id)
+            if pending:
+                request_id, req_data = pending
+                details = req_data.get("details", "")
+                return (
+                    "You just submitted this vacation request in this session:\n\n"
+                    f"**Request ID:** `{request_id}`\n\n{details}\n\n"
+                    "You can continue asking questions. For status from any session, type `status`."
+                )
+        trace_log.append({
+            "type": "node_exec",
+            "label": "Thread Reroute",
+            "from": "agent",
+            "to": "graph",
+            "arrow": "->",
+            "content": (
+                f"thread {thread_id} has pending HITL request; routing question to side thread"
+            ),
+        })
+        active_config = {
+            "configurable": {
+                "thread_id": f"{thread_id}:open-chat",
+                "allowed_tool_names": allowed_tool_names,
+                "agent_name": agent_name,
+            }
+        }
+        side_state = graph.get_state(active_config)
+        main_messages = state.values.get("messages", []) if isinstance(state.values, dict) else []
+        _lf_handler = LangfuseCallbackHandler()
+        with _lf_propagate(tags=["rag", agent_name], session_id=f"{thread_id}:open-chat"):
+            if not getattr(side_state, "values", None) and main_messages:
+                seeded_messages = list(main_messages) + [HumanMessage(content=user_input)]
+                result = graph.invoke({"messages": seeded_messages}, config=active_config)
+            else:
+                result = graph.invoke({"messages": [HumanMessage(content=user_input)]}, config=active_config)
     else:
         _lf_handler = LangfuseCallbackHandler()
         with _lf_propagate(tags=["rag", agent_name], session_id=thread_id):
             result = graph.invoke({"messages": [HumanMessage(content=user_input)]}, config=config)
 
     # Check if graph paused again after this invoke (new interrupt)
-    state_after = graph.get_state(config)
+    state_after = graph.get_state(active_config)
     if state_after.next:
         # Extract REQUEST_ID from _hr_node_trace — node_approve writes it before interrupt()
         req_id = None

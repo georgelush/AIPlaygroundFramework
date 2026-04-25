@@ -5,6 +5,7 @@ LLM instantiation and node logic live here  imported by src/graphs/hr_graph.py.
 import re
 import json
 import openai
+from datetime import datetime, timezone
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage, AIMessage
 from langchain_core.runnables import RunnableConfig
@@ -40,7 +41,15 @@ def _save_pending_request(request_id: str, thread_id: str, details: str) -> None
     _request_store.setex(
         f"hr:pending:{request_id}",
         REQUEST_TTL,
-        json.dumps({"thread_id": thread_id, "details": details, "status": "pending", "employee_id": None}),
+        json.dumps(
+            {
+                "thread_id": thread_id,
+                "details": details,
+                "status": "pending",
+                "employee_id": None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ),
     )
 
 
@@ -59,6 +68,46 @@ def resolve_pending_request(request_id: str) -> dict | None:
     """Return stored request data dict, or None if not found / already processed."""
     raw = _request_store.get(f"hr:pending:{request_id}")
     return json.loads(raw) if raw else None
+
+
+def resolve_request_by_thread(thread_id: str, employee_id: str | None = None) -> tuple[str, dict] | None:
+    """Return first request matching thread_id (and optionally employee_id)."""
+    for key in _request_store.scan_iter("hr:pending:*"):
+        raw = _request_store.get(key)
+        if not raw:
+            continue
+        data = json.loads(raw)
+        if data.get("thread_id") != thread_id:
+            continue
+        if employee_id and data.get("employee_id", "").lower() != employee_id.lower():
+            continue
+        request_id = key.split(":")[-1]
+        return request_id, data
+    return None
+
+
+def resolve_latest_request_for_employee(employee_id: str) -> tuple[str, dict] | None:
+    """Return most relevant request for employee: pending first, otherwise most recent seen."""
+    pending_match: tuple[str, dict] | None = None
+    latest_match: tuple[str, dict] | None = None
+    pending_ts = ""
+    latest_ts = ""
+    for key in _request_store.scan_iter("hr:pending:*"):
+        raw = _request_store.get(key)
+        if not raw:
+            continue
+        data = json.loads(raw)
+        if data.get("employee_id", "").lower() != employee_id.lower():
+            continue
+        request_id = key.split(":")[-1]
+        created_at = data.get("created_at", "")
+        if created_at >= latest_ts:
+            latest_ts = created_at
+            latest_match = (request_id, data)
+        if data.get("status") == "pending" and created_at >= pending_ts:
+            pending_ts = created_at
+            pending_match = (request_id, data)
+    return pending_match or latest_match
 
 
 def close_pending_request(request_id: str, status: str) -> None:
